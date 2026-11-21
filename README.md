@@ -41,7 +41,7 @@ npm run dev
 
 1. 在 `src/destinations/` 新建 `my-bay.ts`。下面这个可运行的例子会在航道一侧立起一块礁石，同时登记它的碰撞范围。
 2. 在航区目录的 `voyages` 数组中新增一项，填入名称、出发点和航行边界，将 `loadWorld` 指向新模块。[航区目录](src/destinations/catalog.ts)
-3. 打开 `?voyage=my-bay` 试航。开场入口和航行中的地图都会读到新航区。重新打包小工具时，包内地图也会收录它。
+3. 打开 `?voyage=my-bay` 试航。开场入口和航行中的地图都会读到新航区。
 
 ```ts
 // src/destinations/my-bay.ts
@@ -80,23 +80,6 @@ export async function build({ scene }: WorldContext, step: Progress): Promise<Pa
 `waterTint` 调节水体的线性 RGB 乘数，`sunBearing` 调节夕阳相对航向的角度。自动巡航默认沿中轴两侧往返，给它留出一条能掉头的水道。动态场景可在 `build` 返回的数组中放入带 `update(dt, time, camera)` 的对象，`dt` 单位为秒。濑户内海的渡轮是一个例子。[濑户内海航区](src/destinations/seto-route.ts)
 
 峡湾里的灯跟着引擎的黄昏时钟走。沿岸木屋、发光窗和码头灯都由峡湾场景构建，航程更新函数带动天色变化。打开 `?voyage=fjord&dusk=0.79&flow=0&x=56&z=-34&yaw=-43`，可以从船上直接看到这一段岸线。[峡湾场景](src/destinations/fjord.ts) · [航程更新函数](src/destinations/fjord-route.ts)
-
-## 小红书小工具
-
-![小工具的登船、航行、掌舵和明信片界面](docs/minitool.webp)
-
-小工具和网页共用航区、船、水面倒影和尾迹。三个地点全部装进同一个离线 ZIP。点右侧的地图就能换景，一趟黄昏默认五分钟。底部从左到右是顺流／掌舵、快门和时刻。快门将画面排成 1080 × 1440 的明信片，在支持的客户端可以保存、发笔记或分享。支持陀螺仪的客户端上，还可以点右上角的手机图标开关体感环顾。
-
-移动版单独控制岸线和远景的面数。持续掉帧时会降低内部分辨率、关闭泛光，再切换为程序天空倒影。
-
-在已运行 `npm ci` 的项目根目录，将创作服务平台提供的 `minitool-zip-builder` **1.11.1** 解压到 `.codex/minitool-zip-builder/`。也可以把环境变量 `MINITOOL_SKILL_DIR` 指向包含 `SKILL.md` 的目录。打包需要 Python 3。
-
-```sh
-npm run build:minitool
-npm run serve:minitool
-```
-
-第一个命令生成 `release/open-waters-minitool-v1.zip` 和同名的 `.validation.json`、`.validation.md`，记录官方对构建目录和 ZIP 的审计结果、文件大小及 SHA-256。第二个命令在本地提供带严格内容安全策略的预览服务。安装桌面版 Chrome 后，执行 `npm run qa:minitool` 会解开刚打的 ZIP 运行独立的浏览器回归测试，并把结果补进两份校验摘要。发布前再用同一份 ZIP 走创服平台模拟器和 Android、iOS 真机扫码。
 
 ## 许可证
 

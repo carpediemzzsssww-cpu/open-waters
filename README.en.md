@@ -40,8 +40,8 @@ Open the sunset control to change the season, jump to a point in dusk, or adjust
 A destination builds the scenery and registers obstacles in the water. The engine handles the boat, steering, sky, water, reflections, and wake. Distances are in meters, the waterline is at `y = 0`, and the bow initially points along `−Z`.
 
 1. Create `src/destinations/my-bay.ts` using the first example below. It places a reef beside the channel and sets its collision boundary.
-2. Add the second example to the `voyages` array. It defines the destination’s name, starting point, and navigation bounds. Keep the relative import in `loadWorld` so the offline build can include the new destination. [Destination catalog](src/destinations/catalog.ts)
-3. Open `?voyage=my-bay` to take it out for a spin. The new destination appears on the departure screen and the in-game map. Rebuild the mini tool to include it on the offline map as well.
+2. Add the second example to the `voyages` array. It defines the destination’s name, starting point, and navigation bounds. [Destination catalog](src/destinations/catalog.ts)
+3. Open `?voyage=my-bay` to take it out for a spin. The new destination appears on the departure screen and the in-game map.
 
 ```ts
 // src/destinations/my-bay.ts
@@ -80,25 +80,6 @@ export async function build({ scene }: WorldContext, step: Progress): Promise<Pa
 Use `waterTint` to scale the water’s RGB channels in linear color space and `sunBearing` to change the sunset’s angle relative to the course. Leave room near the center of the channel for the boat to turn around in cruise mode. To animate an object, have `build` return a part with `update(dt, time, camera)`. The `dt` argument is in seconds, and the ferries show how to use it. [Seto Inland Sea route](src/destinations/seto-route.ts)
 
 The fjord lights follow the engine’s dusk clock. The scene builds the cabins, lit windows, and dock lamps, while the route update lets them fade in as the sky darkens. Open `?voyage=fjord&dusk=0.79&flow=0&x=56&z=-34&yaw=-43` to see that stretch of shore from the boat. [Fjord scene](src/destinations/fjord.ts) · [Route update](src/destinations/fjord-route.ts)
-
-## Xiaohongshu mini tool
-
-![Boarding, cruising, steering, and taking a postcard in the mini tool](docs/minitool.webp)
-
-The mini tool shares the web version’s destinations, boat, reflections, and wake. All three waterways fit in one offline ZIP. Tap the map on the right to switch destinations. Dusk runs for five minutes by default. The bottom controls give you the helm, shutter, and clock. The shutter makes a 1080 × 1440 postcard that supported versions of the app can save, attach to a post, or share. On supported devices, tap the phone icon in the upper right to look around by moving your phone.
-
-The mobile build uses simpler geometry for shorelines and distant scenery. If the frame rate keeps dropping, it reduces internal resolution, switches off bloom, and then uses procedural sky reflections.
-
-Run `npm ci` in the project root and unpack `minitool-zip-builder` **1.11.1** from the Xiaohongshu Creator Services platform into `.codex/minitool-zip-builder/`. You can also set `MINITOOL_SKILL_DIR` to the directory containing `SKILL.md`. Packaging requires Python 3.
-
-```sh
-npm run build:minitool
-npm run serve:minitool
-```
-
-The first command produces `release/open-waters-minitool-v1.zip` and the matching `.validation.json` and `.validation.md` reports. They record the official audit of the build directory and ZIP, along with the file size and SHA-256. The second command serves a local preview with a strict Content Security Policy.
-
-With desktop Chrome installed, run `npm run qa:minitool` to unpack the generated ZIP, run the browser regression tests, and update both reports. Before publishing, test the same ZIP in the Creator Services simulator and scan its preview code on Android and iOS devices.
 
 ## License
 
