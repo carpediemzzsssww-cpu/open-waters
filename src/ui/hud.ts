@@ -1,6 +1,7 @@
-import { clockLabel, seasonState, SEASONS } from '../core/seasons';
+import { clockLabel } from '../core/seasons';
 import { activeVoyage, voyages } from '../destinations/catalog';
 import strings from '../../content/strings.json';
+import { icon } from './icons';
 
 interface HudState {
   dusk: number;
@@ -24,16 +25,16 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
 function voyageLinks(sailing: boolean) {
   const nav = element('nav', 'voyage-links');
   nav.setAttribute('aria-label', '选择航区');
-  for (const v of voyages) {
-    const url = new URL(window.location.href);
-    url.searchParams.set('voyage', v.id);
-    for (const key of ['x', 'z', 'yaw', 'pitch', 'fov', 'thr', 'only']) url.searchParams.delete(key);
+  for (const voyage of voyages) {
+    const url = new URL(location.href);
+    url.searchParams.set('voyage', voyage.id);
+    for (const key of ['x', 'z', 'yaw', 'pitch', 'hdg', 'speed', 'auto', 'fov', 'thr', 'only']) url.searchParams.delete(key);
     if (sailing) url.searchParams.set('go', '1');
     else url.searchParams.delete('go');
-    const link = element('a', 'voyage-link');
+    const link = element('a', 'voyage-link', voyage.name);
     link.href = url.href;
-    link.dataset.voyage = v.id;
-    if (v === activeVoyage) {
+    link.dataset.voyage = voyage.id;
+    if (voyage === activeVoyage) {
       link.setAttribute('aria-current', 'page');
       link.addEventListener('click', e => {
         if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
@@ -41,10 +42,18 @@ function voyageLinks(sailing: boolean) {
         link.closest('dialog')?.close();
       });
     }
-    link.append(element('strong', '', v.name), element('small', '', v.localName));
     nav.append(link);
   }
   return nav;
+}
+
+function iconButton(className: string, label: string, glyph: Parameters<typeof icon>[0]) {
+  const b = element('button', className);
+  b.type = 'button';
+  b.title = label;
+  b.setAttribute('aria-label', label);
+  b.innerHTML = icon(glyph);
+  return b;
 }
 
 export class Hud {
@@ -53,107 +62,104 @@ export class Hud {
   onPad: (fwd: number, turn: number) => void = () => {};
   private title = element('section', 'title');
   private bar = element('i', '');
-  private loadLabel = element('span', 'load-label', '正在铺开水面…');
-  private beginBtn = element('button', 'begin', '登船出发');
-  private caption = element('div', 'caption');
-  private clock = element('button', 'clock');
-  private mode = element('button', 'mode');
-  private hint = element('ul', 'hint');
+  private loadLabel = element('span', 'load-label sr-only', '正在加载航区');
+  private beginBtn = element('button', 'begin', '登船');
+  private clock = iconButton('clock', '时刻与季节', 'dusk');
+  private mode = iconButton('mode', '自动巡航', 'helm');
   private toastEl = element('div', 'toast');
   private dialog = element('dialog', 'atlas');
-  private shown = new Set<string>();
-  private captionTimer = 0;
   private toastTimer = 0;
-  private sinceStart = 0;
   private endTold = false;
-  private lastClock = '';
 
-  constructor(private root: HTMLElement, private silent: boolean) {
-    const v = activeVoyage;
-    document.title = v.name + ' · Open Waters';
-    document.getElementById('stage')?.setAttribute('aria-label', v.name + ' · 第一人称游船');
+  constructor(private root: HTMLElement, silent: boolean) {
+    const voyage = activeVoyage;
+    document.title = voyage.name + ' · Open Waters';
+    document.getElementById('stage')?.setAttribute('aria-label', voyage.name + ' · 第一人称游船');
     this.title.setAttribute('aria-label', '选择航区与登船');
-    this.title.innerHTML = `
-      <header class="mast"><div class="wordmark"><i class="compass" aria-hidden="true"></i>Open Waters</div><span class="mast-cn">开放水域</span></header>
-      <div class="departure">
-        <div class="region"></div>
-        <h1></h1><p class="local-name"></p>
-        <p class="description"></p>
-        <div class="gate"></div>
-      </div>
-      <footer class="atlas-strip"><span class="strip-label">航区目录</span></footer>`;
-    this.title.querySelector('.region')!.textContent = v.region;
-    this.title.querySelector('h1')!.textContent = v.name;
-    this.title.querySelector('.local-name')!.textContent = v.localName;
-    this.title.querySelector('.description')!.textContent = v.description;
-    this.title.querySelector('.atlas-strip')!.append(voyageLinks(false));
+    const intro = element('div', 'departure');
+    const heading = element('h1', '', voyage.localName);
+    const gate = element('div', 'gate');
     const loading = element('div', 'loading');
     loading.append(this.bar);
-    const loadStatus = element('div', 'load-status');
-    loadStatus.setAttribute('role', 'status');
-    loadStatus.append(loading, this.loadLabel);
+    const status = element('div', 'load-status');
+    status.setAttribute('role', 'status');
+    status.append(loading, this.loadLabel);
     this.beginBtn.type = 'button';
     this.beginBtn.disabled = true;
-    this.beginBtn.append(element('span', 'board-arrow', '⟶'));
+    this.beginBtn.insertAdjacentHTML('beforeend', icon('board'));
     this.beginBtn.setAttribute('aria-label', '登船出发');
     this.beginBtn.addEventListener('click', () => this.onBegin());
-    this.title.querySelector('.gate')!.append(loadStatus, this.beginBtn);
+    gate.append(status, this.beginBtn);
+    intro.append(heading, gate);
+    this.title.append(intro, voyageLinks(false));
 
-    const trigger = element('button', 'atlas-trigger');
-    trigger.innerHTML = '<i class="compass" aria-hidden="true"></i>航区目录';
-    trigger.type = 'button';
+    const atlas = iconButton('atlas-trigger', '选择航区', 'atlas');
     this.dialog.id = 'voyage-atlas';
-    trigger.setAttribute('aria-controls', this.dialog.id);
-    trigger.setAttribute('aria-haspopup', 'dialog');
     this.dialog.setAttribute('aria-labelledby', 'atlas-title');
-    this.dialog.innerHTML = `<header><h2 id="atlas-title">航区目录</h2><button type="button" class="atlas-close" aria-label="收起航区目录">×</button></header>`;
-    this.dialog.append(voyageLinks(true));
-    trigger.addEventListener('click', () => this.dialog.showModal());
-    this.dialog.querySelector('.atlas-close')!.addEventListener('click', () => this.dialog.close());
+    atlas.setAttribute('aria-controls', this.dialog.id);
+    atlas.setAttribute('aria-haspopup', 'dialog');
+    const header = element('header', '');
+    const dialogTitle = element('h2', '', '航区');
+    dialogTitle.id = 'atlas-title';
+    const close = iconButton('atlas-close', '收起航区目录', 'close');
+    close.addEventListener('click', () => this.dialog.close());
+    header.append(dialogTitle, close);
+    this.dialog.append(header, voyageLinks(true));
+    atlas.addEventListener('click', () => this.dialog.showModal());
     this.dialog.addEventListener('click', e => {
       if (e.target !== this.dialog) return;
-      const r = this.dialog.getBoundingClientRect();
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) this.dialog.close();
+      const box = this.dialog.getBoundingClientRect();
+      if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) this.dialog.close();
     });
 
-    this.clock.type = 'button';
-    this.mode.type = 'button';
-    this.mode.setAttribute('aria-label', '自动巡航');
-    this.mode.title = '切换巡航与手动掌舵';
     this.mode.addEventListener('click', () => this.onToggleCruise());
-    for (const [key, label] of strings.keys) {
-      const li = element('li', '');
-      li.append(element('kbd', '', key), label);
-      this.hint.append(li);
-    }
+    const dock = element('div', 'sailing-controls');
+    dock.setAttribute('role', 'group');
+    dock.setAttribute('aria-label', '航行控制');
+    dock.append(atlas, this.mode, this.clock);
     const pad = element('div', 'pad');
-    const padButton = (cls: string, glyph: string, label: string, fwd: number, turn: number) => {
-      const b = element('button', cls, glyph);
-      b.type = 'button';
-      b.setAttribute('aria-label', label);
-      b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); this.onPad(fwd, turn); });
-      b.addEventListener('lostpointercapture', () => this.onPad(0, 0));
-      pad.append(b);
+    // Each finger owns its own axis. Releasing throttle must leave a held rudder intact.
+    const held = new Map<number, [number, number]>();
+    const updatePad = () => {
+      let fwd = 0, turn = 0;
+      for (const v of held.values()) { fwd += v[0]; turn += v[1]; }
+      this.onPad(Math.sign(fwd), Math.sign(turn));
     };
-    padButton('l', '‹', '向左转舵', 0, 1);
-    padButton('u', '+', '加速', 1, 0);
-    padButton('d', '−', '减速或倒船', -1, 0);
-    padButton('r', '›', '向右转舵', 0, -1);
+    const addPad = (cls: string, glyph: string, label: string, fwd: number, turn: number) => {
+      const button = element('button', cls, glyph);
+      button.type = 'button';
+      button.setAttribute('aria-label', label);
+      button.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        button.setPointerCapture(e.pointerId);
+        held.set(e.pointerId, [fwd, turn]);
+        updatePad();
+      });
+      button.addEventListener('lostpointercapture', e => {
+        held.delete(e.pointerId);
+        updatePad();
+      });
+      pad.append(button);
+    };
+    addPad('l', '‹', '向左转舵', 0, 1);
+    addPad('u', '+', '加速', 1, 0);
+    addPad('d', '−', '减速或倒船', -1, 0);
+    addPad('r', '›', '向右转舵', 0, -1);
+
     this.toastEl.setAttribute('role', 'status');
-    root.append(this.title, trigger, this.dialog, this.caption, this.clock, this.mode, this.hint, this.toastEl, pad);
+    root.append(this.title, dock, this.dialog, this.toastEl, pad);
     if (silent) root.classList.add('silent');
   }
 
-  progress(label: string, p: number) {
+  progress(_label: string, p: number) {
     this.bar.style.transform = `scaleX(${Math.max(0.02, p)})`;
-    const map = strings.loading as Record<string, string>;
-    this.loadLabel.textContent = (map[label] ?? '正在铺开水面') + '…';
   }
   ready() {
     this.root.classList.add('ready');
     this.beginBtn.disabled = false;
   }
   fail(msg: string) {
+    this.loadLabel.classList.remove('sr-only');
     this.loadLabel.textContent = '航区加载失败：' + msg;
     this.root.classList.add('load-failed');
   }
@@ -161,7 +167,7 @@ export class Hud {
     this.root.classList.add('started');
     this.title.inert = true;
     this.beginBtn.blur();
-    setTimeout(() => this.title.remove(), 900);
+    setTimeout(() => this.title.remove(), 850);
   }
   toggleHidden() {
     if (this.dialog.open) this.dialog.close();
@@ -170,47 +176,22 @@ export class Hud {
   toast(key: keyof typeof strings.toast) {
     this.toastEl.textContent = strings.toast[key];
     this.toastEl.classList.add('on');
-    this.toastTimer = 2.6;
-  }
-  private say(key: string, title: string, subtitle: string) {
-    this.shown.add(key);
-    this.caption.replaceChildren(element('b', '', title), element('span', '', subtitle));
-    this.caption.classList.add('on');
-    this.captionTimer = 6.5;
+    this.toastTimer = 1.8;
   }
   update(dt: number, s: HudState) {
     if (!s.started) return;
-    this.sinceStart += dt;
-    if (this.sinceStart > 13) this.root.classList.add('settled');
-    if (this.captionTimer > 0) {
-      this.captionTimer -= dt;
-      if (this.captionTimer <= 0) this.caption.classList.remove('on');
-    } else if (this.sinceStart > 2.5) {
-      const place = activeVoyage.landmarks?.find(l => s.z >= l.minZ && s.z <= l.maxZ && !this.shown.has(l.name));
-      if (!this.shown.has('start')) this.say('start', activeVoyage.localName, activeVoyage.name);
-      else if (place) this.say(place.name, place.name, place.subtitle);
-      else if (s.dusk > 0.72 && !this.shown.has('blue')) this.say('blue', 'Blue hour', '蓝调时刻');
-      else if (s.dusk > 0.36 && s.dusk < 0.5 && !this.shown.has('sunset')) this.say('sunset', 'Sunset', '日落');
-    }
-    if (this.toastTimer > 0) {
-      this.toastTimer -= dt;
-      if (this.toastTimer <= 0) this.toastEl.classList.remove('on');
-    }
+    if (this.toastTimer > 0 && (this.toastTimer -= dt) <= 0) this.toastEl.classList.remove('on');
     if (s.atEnd > 0.5 && !s.auto && !this.endTold) {
       this.endTold = true;
       this.toast('end');
     }
     if (!s.atEnd) this.endTold = false;
-    const txt = clockLabel(s.dusk);
-    const key = `${txt}:${s.flow}:${seasonState.current}`;
-    if (key !== this.lastClock) {
-      this.lastClock = key;
-      this.clock.innerHTML = `<b>${txt}</b><span>${SEASONS[seasonState.current].name} · ${s.flow ? '时刻与季节' : strings.hud.paused} ⌄</span>`;
+    const pressed = String(s.auto);
+    if (this.mode.getAttribute('aria-pressed') !== pressed) {
+      this.mode.setAttribute('aria-pressed', pressed);
+      this.mode.title = s.auto ? '切换为掌舵' : '切换为巡航';
     }
-    const mode = `${s.auto ? '巡航' : strings.hud.manual} · ${(Math.abs(s.speed) * 3.6).toFixed(1)} km/h`;
-    if (this.mode.textContent !== mode) {
-      this.mode.textContent = mode;
-      this.mode.setAttribute('aria-pressed', String(s.auto));
-    }
+    const title = clockLabel(s.dusk) + ' · 时刻与季节';
+    if (this.clock.title !== title) this.clock.title = title;
   }
 }

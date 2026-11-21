@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { inject, withAtmo } from '../core/atmosphere';
 import { addCollider } from '../world/collide';
+import { LampSet } from '../world/lamps';
+import type { Kit } from '../world/materials';
+import type { LampSpot } from '../world/river';
 
 type Side = 1 | -1;
 const step = (a: number, b: number, x: number) => THREE.MathUtils.smoothstep(x, a, b);
@@ -198,6 +201,7 @@ function batch(scene:THREE.Scene, shape:THREE.BufferGeometry, pieces:Piece[], ve
   });
   inst.computeBoundingSphere();
   scene.add(inst);
+  return inst;
 }
 function conifer(){
   const v:number[]=[],c:number[]=[],ix:number[]=[];
@@ -239,10 +243,15 @@ function vegetation(scene:THREE.Scene,rand:()=>number) {
   batch(scene,conifer(),trees,true);
   batch(scene,new THREE.DodecahedronGeometry(.73),boulders);
 }
-function hamlets(scene:THREE.Scene) {
-  const pieces:Piece[]=[];
+function hamlets(scene: THREE.Scene, kit: Kit) {
+  const pieces: Piece[] = [];
+  const lanterns: LampSpot[] = [];
+  const lights: { index: number; tint: number; strength: number; delay: number }[] = [];
+  function illuminate(index: number, tint: number, strength: number, delay: number) {
+    lights.push({ index, tint, strength, delay });
+  }
   const box=(x:number,y:number,z:number,w:number,h:number,l:number,color:number,yaw=0,tilt=0)=>
-    pieces.push({x,y,z,w,h,l,color,yaw,tilt});
+    pieces.push({x,y,z,w,h,l,color,yaw,tilt}) - 1;
   for(const s of [-1,1] as const) {
     const center=s===1?-83:-648;
     const palette=[0x9e433b,0xcfbc99,0xa96645,0xe2d6bf,0x883c32,0xa28b68,0xc7b194];
@@ -255,6 +264,10 @@ function hamlets(scene:THREE.Scene) {
       const local=(xx:number,yy:number,zz:number,ww:number,hh:number,ll:number,tint:number,tilt=0)=>
         box(x+xx*Math.cos(yaw)+zz*Math.sin(yaw),y+yy,z-xx*Math.sin(yaw)+zz*Math.cos(yaw),ww,hh,ll,tint,yaw,tilt);
       const walls=palette[i%palette.length];
+      const glass = 0x48585b;
+      const roomColors = [0xffc384, 0xffdeab, 0xffb16c, 0xffcf95];
+      const roomTint = roomColors[(i + (s > 0 ? 1 : 0)) % roomColors.length];
+      const houseDelay = 0.14 + 0.50 * noise(i * 2.3, s + 6);
       local(0,-.68,0,w+.14,2.4,l+.12,0x666861);
       local(0,.48+h/2,0,w,h,l,walls);
       // Gable boarding, weatherboards, white cornerboards and mullions.
@@ -268,10 +281,20 @@ function hamlets(scene:THREE.Scene) {
         for(const end of [-1,1])local(wing*w*.498,.48+h*.5,end*l*.498,.11,h,.11,0xe7ddc8);
         for(const zz of [-l*.27,l*.26]) {
           local(wing*w*.508,1.45,zz,.13,1.06,.88,0xe8deca);
-          local(wing*(w/2+.085),1.45,zz,.07,.86,.67,0x48585b);
+          const pane = local(wing*(w/2+.085),1.45,zz,.07,.86,.67,glass);
+          const room = noise(i * 3.9 + wing * 13, zz * 5 + s);
+          if (room > 0.14) illuminate(pane, roomTint, 1.5 + 2.4 * room, houseDelay + room * 0.15);
           local(wing*(w/2+.13),1.45,zz,.04,.84,.052,0xd9d3b9);
           local(wing*(w/2+.13),1.45,zz,.04,.062,.68,0xd9d3b9);
         }
+      }
+      // Gable windows face boats approaching along the fjord.
+      for (const end of [-1, 1]) {
+        const sill = 0.48 + h + 0.20;
+        local(0,sill,end*(l/2+.045),.88,.72,.085,0xe8deca);
+        const pane = local(0,sill,end*(l/2+.10),.70,.55,.05,glass);
+        local(0,sill,end*(l/2+.137),.055,.56,.026,0xd9d3b9);
+        if ((i + end) % 3 !== 0) illuminate(pane, roomTint, 1.85, houseDelay + 0.21);
       }
       local(0,1.27,-l/2,1.02,1.75,.16,0xe0d4b8);
       local(0,1.26,-l/2-.10,.77,1.60,.09,0x59665e);
@@ -280,7 +303,26 @@ function hamlets(scene:THREE.Scene) {
     }
     const z=center+2,edge=waterline(s,z);
     box(edge-s*3,.80,z,13,.24,2.35,0x8b7964);
-    for(let j=0;j<25;j++)box(edge-s*(-3+j*.51),.96,z,.47,.08,2.42,j%3===1?0x978571:0x8d7960);
+    const dockLights = [
+      { along: 8.5, delay: 0.05, power: 1.3, color: 0xffc783 },
+      { along: -1.0, delay: 0.14, power: 0.92, color: 0xffddaa },
+    ];
+    for (const light of dockLights) {
+      const x = edge - s * light.along;
+      const lampZ = z + 0.97;
+      box(x,2.06,lampZ,.12,1.20,.12,0x474d4b);
+      box(x,2.71,lampZ,.34,.10,.34,0x414442);
+      box(x,3.03,lampZ,.38,.09,.38,0x46504b);
+      box(x,3.10,lampZ,.23,.06,.23,0x56615a);
+      lanterns.push({ x, y: 2.87, z: lampZ, r: 0.13, pool: -1, ...light });
+    }
+    for (let j = 0; j < 25; j++) {
+      const along = -3 + j * 0.51;
+      const plank = box(edge - s * along, .96, z, .47, .08, 2.42, j % 3 === 1 ? 0x978571 : 0x8d7960);
+      const lamp = dockLights[along > 3.75 ? 0 : 1];
+      const spill = 0.085 * lamp.power / (1 + ((along - lamp.along) / 1.7) ** 2);
+      illuminate(plank, lamp.color, spill, lamp.delay);
+    }
     for(const a of [-1.0,3.1,8.5])for(const k of [-.97,.97]){
       box(edge-s*a,-.1,z+k,.30,2.9,.30,0x595c55);
       box(edge-s*a,1.4,z+k,.33,.12,.33,0xbbb3a0);
@@ -288,7 +330,32 @@ function hamlets(scene:THREE.Scene) {
     box(edge-s*3.4,1.4,z+1.04,11,.12,.11,0xab9880);
     addCollider({x:edge-s*3,z,hl:6.5,hw:1.21,r:.11,yaw:Math.PI/2});
   }
-  batch(scene,new THREE.BoxGeometry(1,1,1),pieces);
+  const buildings = batch(scene, new THREE.BoxGeometry(1, 1, 1), pieces);
+  buildings.name = 'Fjord · cottages and jetties';
+  // Bake each room's tint, intensity and switch-on time into the static batch.
+  // The same shader runs for the mirrored camera, so the lights ripple in the water.
+  const emission = new Float32Array(pieces.length * 4);
+  const color = new THREE.Color();
+  for (const { index, tint, strength, delay } of lights) {
+    color.setHex(tint).multiplyScalar(strength);
+    emission.set([color.r, color.g, color.b, delay], index * 4);
+  }
+  buildings.geometry.setAttribute('aRoomLight', new THREE.InstancedBufferAttribute(emission, 4));
+  withAtmo(buildings.material, 'fjord-evening-windows', shader => {
+    shader.vertexShader = inject(shader.vertexShader, '#include <common>', `
+      attribute vec4 aRoomLight;
+      uniform float uNight;
+      varying vec3 vRoomEmission;
+    `);
+    shader.vertexShader = inject(shader.vertexShader, '#include <begin_vertex>', `
+      vRoomEmission = aRoomLight.rgb * smoothstep(aRoomLight.a, aRoomLight.a + 0.12, uNight);
+    `);
+    shader.fragmentShader = inject(shader.fragmentShader, '#include <common>', 'varying vec3 vRoomEmission;');
+    shader.fragmentShader = inject(shader.fragmentShader, '#include <emissivemap_fragment>', 'totalEmissiveRadiance += vRoomEmission;');
+  });
+  const dockLamps = new LampSet(lanterns, kit);
+  dockLamps.group.name = 'Fjord · dock lanterns';
+  scene.add(dockLamps.group);
 }
 
 function falls(scene:THREE.Scene) {
@@ -332,13 +399,13 @@ function falls(scene:THREE.Scene) {
   scene.add(new THREE.Mesh(g,mat));
 }
 
-export function buildFjord(scene:THREE.Scene):void {
+export function buildFjord(scene: THREE.Scene, kit: Kit): void {
   clock.value=0;
   const stone=rockMaterial();
   for(const side of [-1,1] as const){bank(scene,side,stone);solidShore(side);}
   mountains(scene,stone);
   vegetation(scene,randomSource());
-  hamlets(scene);
+  hamlets(scene, kit);
   falls(scene);
 }
 export function updateFjord(dt:number):void { clock.value+=dt; }

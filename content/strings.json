@@ -53,13 +53,13 @@
     ]
   ],
   "toast": {
-    "auto_on": "已交给自动巡航",
-    "auto_off": "你来掌舵",
-    "flow_on": "时间继续往蓝调时刻走",
-    "flow_off": "时间停在这一刻",
-    "mute_on": "静音",
-    "mute_off": "声音开",
-    "end": "到了这片航区的边缘，掉头可以继续航行"
+    "auto_on": "自动巡航",
+    "auto_off": "手动掌舵",
+    "flow_on": "时间流动",
+    "flow_off": "时间暂停",
+    "mute_on": "已静音",
+    "mute_off": "声音已开",
+    "end": "航区边界 · 请掉头"
   },
   "captions": {
     "start": [
