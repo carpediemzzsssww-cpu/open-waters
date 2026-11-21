@@ -1,0 +1,112 @@
+{
+  "title": {
+    "eyebrow": "Paris · un soir d’été",
+    "line1": "La Seine,",
+    "line2": "l’heure dorée",
+    "sub": "塞纳河上，夏天的黄昏",
+    "begin": "登船",
+    "beginFr": "Embarquer",
+    "loading": "正在铺开河面",
+    "note": "戴上耳机更好"
+  },
+  "loading": {
+    "quays": "砌河岸的石墙",
+    "bridge": "架起亚历山大三世桥",
+    "bridges": "远一点的桥",
+    "city": "盖奥斯曼的楼",
+    "landmarks": "立起铁塔和大皇宫",
+    "trees": "种梧桐和白杨",
+    "lamps": "挂上路灯",
+    "boat": "给小船上清漆",
+    "traffic": "放几条船下水",
+    "people": "请人们到河边来",
+    "birds": "放雨燕"
+  },
+  "keys": [
+    [
+      "W S",
+      "油门"
+    ],
+    [
+      "A D",
+      "转舵"
+    ],
+    [
+      "拖动",
+      "环顾"
+    ],
+    [
+      "滚轮",
+      "变焦"
+    ],
+    [
+      "空格",
+      "交还给水流"
+    ],
+    [
+      "T",
+      "让时间停下"
+    ],
+    [
+      "M",
+      "静音"
+    ]
+  ],
+  "toast": {
+    "auto_on": "已交给自动巡航",
+    "auto_off": "你来掌舵",
+    "flow_on": "时间继续往蓝调时刻走",
+    "flow_off": "时间停在这一刻",
+    "mute_on": "静音",
+    "mute_off": "声音开",
+    "end": "到了这片航区的边缘，掉头可以继续航行"
+  },
+  "captions": {
+    "start": [
+      "La Seine",
+      "塞纳河 · 香榭丽舍港"
+    ],
+    "alexandre": [
+      "Pont Alexandre III",
+      "亚历山大三世桥，1900"
+    ],
+    "eiffel": [
+      "La tour Eiffel",
+      "左前方，埃菲尔铁塔"
+    ],
+    "grandpalais": [
+      "Le Grand Palais",
+      "右岸，大皇宫的玻璃穹顶"
+    ],
+    "invalides": [
+      "Pont des Invalides",
+      "荣军院桥"
+    ],
+    "blue": [
+      "L’heure bleue",
+      "蓝调时刻，河岸的灯亮了"
+    ],
+    "sunset": [
+      "Le coucher du soleil",
+      "太阳落进河的尽头"
+    ]
+  },
+  "hud": {
+    "auto": "顺流",
+    "manual": "掌舵",
+    "paused": "时间停着",
+    "city": "Paris"
+  },
+  "pad": {
+    "left": "左",
+    "right": "右",
+    "up": "加速",
+    "down": "减速"
+  },
+  "fallback": {
+    "nogl": "这段旅程需要 WebGL 2。请换一台较新的设备，或在新版浏览器里打开。",
+    "nohdr": "这段航程需要浮点渲染支持。请用支持 WebGL 2 的浏览器打开。",
+    "slow": "这台设备跑得有点吃力，先停在这一帧。换一台手机再来坐一趟船吧。",
+    "lost": "画面休息了。关掉再打开一次，就能重新上船。"
+  }
+}
