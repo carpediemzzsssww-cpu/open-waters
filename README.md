@@ -1,5 +1,7 @@
 # 开放水域 · Open Waters
 
+**简体中文** · [English](README.en.md)
+
 在塞纳河上，桥拱的影子慢慢掠过船头。换到挪威，同一片水面映出的是岩壁和瀑布。
 
 ![从木船上看塞纳河、盖朗厄尔峡湾和濑户内海](docs/voyages.webp)
@@ -38,8 +40,8 @@ npm run dev
 每个航区只负责岸上的世界和水中的障碍物。引擎负责造船、驾驶、天空、水面、倒影和尾迹。长度以米计，水面在 `y = 0`，船头初始指向 `−Z`。
 
 1. 在 `src/destinations/` 新建 `my-bay.ts`。下面这个可运行的例子会在航道一侧立起一块礁石，同时登记它的碰撞范围。
-2. 在 [航区目录](src/destinations/catalog.ts) 的 `voyages` 数组中新增一项，填入名称、出发点和航行边界，将 `loadWorld` 指向新模块。
-3. 打开 `?voyage=my-bay` 试航。选择入口、直达地址和航行中的目录都会读到新航区。
+2. 在航区目录的 `voyages` 数组中新增一项，填入名称、出发点和航行边界，将 `loadWorld` 指向新模块。[航区目录](src/destinations/catalog.ts)
+3. 打开 `?voyage=my-bay` 试航。开场入口和航行中的地图都会读到新航区。重新打包小工具时，包内地图也会收录它。
 
 ```ts
 // src/destinations/my-bay.ts
@@ -75,9 +77,9 @@ export async function build({ scene }: WorldContext, step: Progress): Promise<Pa
 },
 ```
 
-`waterTint` 调节水体的线性 RGB 乘数，`sunBearing` 调节夕阳相对航向的角度。自动巡航默认沿中轴两侧往返，给它留出一条能掉头的水道。动态场景可在 `build` 返回的数组中放入带 `update(dt, time, camera)` 的对象，`dt` 单位为秒。渡轮的写法见 [濑户内海航区](src/destinations/seto-route.ts)。
+`waterTint` 调节水体的线性 RGB 乘数，`sunBearing` 调节夕阳相对航向的角度。自动巡航默认沿中轴两侧往返，给它留出一条能掉头的水道。动态场景可在 `build` 返回的数组中放入带 `update(dt, time, camera)` 的对象，`dt` 单位为秒。濑户内海的渡轮是一个例子。[濑户内海航区](src/destinations/seto-route.ts)
 
-峡湾里的灯跟着引擎的黄昏时钟走。可以在 [峡湾场景](src/destinations/fjord.ts) 找到沿岸木屋、发光窗和码头灯，在 [航程更新函数](src/destinations/fjord-route.ts) 看它们怎样随天色渐亮。打开 `?voyage=fjord&dusk=0.79&flow=0&x=56&z=-34&yaw=-43`，可以从船上直接看到这一段岸线。
+峡湾里的灯跟着引擎的黄昏时钟走。沿岸木屋、发光窗和码头灯都由峡湾场景构建，航程更新函数带动天色变化。打开 `?voyage=fjord&dusk=0.79&flow=0&x=56&z=-34&yaw=-43`，可以从船上直接看到这一段岸线。[峡湾场景](src/destinations/fjord.ts) · [航程更新函数](src/destinations/fjord-route.ts)
 
 ## 小红书小工具
 
@@ -96,10 +98,6 @@ npm run serve:minitool
 
 第一个命令生成 `release/open-waters-minitool-v1.zip` 和同名的 `.validation.json`、`.validation.md`，记录官方对构建目录和 ZIP 的审计结果、文件大小及 SHA-256。第二个命令在本地提供带严格内容安全策略的预览服务。安装桌面版 Chrome 后，执行 `npm run qa:minitool` 会解开刚打的 ZIP 运行独立的浏览器回归测试，并把结果补进两份校验摘要。发布前再用同一份 ZIP 走创服平台模拟器和 Android、iOS 真机扫码。
 
-## English
+## 许可证
 
-Take the same wooden boat down the Seine, into a Norwegian fjord, or between islands in Japan’s Seto Inland Sea. Steer by hand or let the boat cruise through dusk. Each destination is a hand-built interpretation of a place, rendered in real time with procedural geometry, reflected light and synthesized sound. To add a voyage, export a scene builder and register it in the destination catalog.
-
-## License
-
-项目源码使用 [MIT 许可证](LICENSE)。three.js 使用其随包分发的 MIT 许可证。
+项目源码和 three.js 均采用 MIT 许可证。[项目许可证](LICENSE) · [three.js 许可证](public/three-LICENSE.txt)
