@@ -16,3 +16,5 @@ CLAUDE.md
 progress.md
 release/
 *.zip
+dist-minitool/
+output/

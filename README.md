@@ -9,14 +9,18 @@ Open Waters 是一组可以亲自掌舵的第一人称 3D 航程。选一处水�
 | 航区 | 从船上能看到什么 | 航区 ID |
 | --- | --- | --- |
 | 法国 · 塞纳河 | 石岸、驳船、亚历山大三世桥，入夜后逐盏点亮的河灯 | `seine` |
-| 挪威 · 盖朗厄尔峡湾 | 沿岩面落下的瀑布、坡上的针叶林和临水木屋 | `fjord` |
+| 挪威 · 盖朗厄尔峡湾 | 沿岩面落下的瀑布、坡上的针叶林，天黑后逐扇亮起的木屋窗户与码头灯 | `fjord` |
 | 日本 · 濑户内海 | 可绕行的岛屿、带港灯的防波堤、岛间渡轮和悬索桥 | `seto` |
+
+![入夜后的挪威峡湾，码头的灯影映在水面](docs/fjord-lights.webp)
 
 ## 本地出航
 
 使用 Node.js 22.12 或更新的 LTS 版本，以及支持 WebGL 2、浮点渲染目标的浏览器。
 
 ```sh
+git clone https://github.com/carpediemzzsssww-cpu/open-waters.git
+cd open-waters
 npm ci
 npm run dev
 ```
@@ -25,9 +29,9 @@ npm run dev
 
 ## 掌舵
 
-登船后会自动巡航。用 **W / S** 增减油门，持续减速可以倒船。**A / D** 接管船舵，**空格**切回巡航。拖动画面环顾，滚轮变焦。手机用屏幕方向键驾驶，双指缩放，点船速旁的 ⇄ 可以切回巡航。
+登船后会自动巡航。用 **W / S** 增减油门，持续减速可以倒船。**A / D** 接管船舵，**空格**切回巡航。拖动画面环顾，滚轮变焦。手机用屏幕方向键驾驶，双指缩放，点船舵图标切换手动驾驶和巡航。
 
-点钟点可以调季节、黄昏进度和流速。**T** 暂停时间，**M** 切换声音，**H** 隐藏界面。点「航区目录」可以换水域，每次换航区从新航区的起点出发。
+点日落图标可以调季节、黄昏进度和流速。**T** 暂停时间，**M** 切换声音，**H** 隐藏界面。点地图图标可以换水域，每次换航区从新航区的起点出发。
 
 ## 做一片自己的水域
 
@@ -71,7 +75,9 @@ export async function build({ scene }: WorldContext, step: Progress): Promise<Pa
 },
 ```
 
-`waterTint` 调节水体的线性 RGB 乘数，`sunBearing` 调节夕阳相对航向的角度，`landmarks` 可以在指定河段显示地名。自动巡航默认沿中轴两侧往返，给它留出一条能掉头的水道。动态场景可在 `build` 返回的数组中放入带 `update(dt, time, camera)` 的对象，`dt` 单位为秒。渡轮的写法见 [濑户内海航区](src/destinations/seto-route.ts)。
+`waterTint` 调节水体的线性 RGB 乘数，`sunBearing` 调节夕阳相对航向的角度。自动巡航默认沿中轴两侧往返，给它留出一条能掉头的水道。动态场景可在 `build` 返回的数组中放入带 `update(dt, time, camera)` 的对象，`dt` 单位为秒。渡轮的写法见 [濑户内海航区](src/destinations/seto-route.ts)。
+
+峡湾里的灯跟着引擎的黄昏时钟走。可以在 [峡湾场景](src/destinations/fjord.ts) 找到沿岸木屋、发光窗和码头灯，在 [航程更新函数](src/destinations/fjord-route.ts) 看它们怎样随天色渐亮。打开 `?voyage=fjord&dusk=0.79&flow=0&x=56&z=-34&yaw=-43`，可以从船上直接看到这一段岸线。
 
 ## English
 
