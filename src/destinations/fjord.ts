@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MINI } from '../core/env';
 import { inject, withAtmo } from '../core/atmosphere';
 import { addCollider } from '../world/collide';
 import { LampSet } from '../world/lamps';
@@ -9,10 +10,16 @@ type Side = 1 | -1;
 const step = (a: number, b: number, x: number) => THREE.MathUtils.smoothstep(x, a, b);
 const bell = (x: number, w: number) => Math.exp(-(x * x) / (w * w));
 const clock = { value: 0 };
-const rows = [-4, 0, 2, 4, 6, 9, 13, 18, 24, 31, 39, 48, 57, 66, 76, 87, 99, 113, 129, 148, 169, 194, 224, 264, 310, 370, 460, 590, 800, 1200];
+const rows = MINI ? [-4, 0, 2, 4, 6, 18, 47, 83, 145, 270, 500, 1200] : [-4, 0, 2, 4, 6, 9, 13, 18, 24, 31, 39, 48, 57, 66, 76, 87, 99, 113, 129, 148, 169, 194, 224, 264, 310, 370, 460, 590, 800, 1200];
 const dz = 4;
 const z0 = -1800;
 const z1 = 876;
+// Keep every original four-metre waterline sample along the navigable banks.
+function terrainStep(z: number) {
+  if (!MINI) return dz;
+  if (z < -1000) return 32;
+  return z >= 336 ? 20 : dz;
+}
 
 function lattice(x: number, y: number) {
   let h = Math.imul(x, 374761393) + Math.imul(y, 668265263);
@@ -102,7 +109,7 @@ const wet = new THREE.Color(0x46545a), snow = new THREE.Color(0xd4d9d8);
 function bank(scene: THREE.Scene, side: Side, material: THREE.Material) {
   const p: number[] = [], color: number[] = [], index: number[] = [];
   const tint = new THREE.Color();
-  for (let z = z0; z <= z1; z += dz) {
+  for (let z = z0; z <= z1; z += terrainStep(z)) {
     const coast = shore(side, z);
     for (const [j, d] of rows.entries()) {
       const y = elevation(side, d, z), slope = Math.abs(elevation(side, d + 1, z) - y);
@@ -129,14 +136,17 @@ function bank(scene: THREE.Scene, side: Side, material: THREE.Material) {
 // Sample the same triangles as the visible bank so short trees, footings and
 // boulders meet the mesh even on the broken ledges between height samples.
 function ground(s: Side, x: number, z: number) {
-  const za=z0+Math.floor((z-z0)/dz)*dz, fz=(z-za)/dz;
-  const d=s*x-THREE.MathUtils.lerp(shore(s,za),shore(s,za+dz),fz);
+  const stride = terrainStep(z);
+  const origin = MINI && z >= 336 ? 336 : z0;
+  const za = origin + Math.floor((z-origin)/stride)*stride;
+  const zb = za + stride, fz = (z-za)/stride;
+  const d=s*x-THREE.MathUtils.lerp(shore(s,za),shore(s,zb),fz);
   let i=1;
   while(i < rows.length-1 && rows[i] < d) i++;
   const da=rows[i-1], db=rows[i], fd=THREE.MathUtils.clamp((d-da)/(db-da),0,1);
-  const a=elevation(s,da,za), b=elevation(s,da,za+dz), c=elevation(s,db,za);
+  const a=elevation(s,da,za), b=elevation(s,da,zb), c=elevation(s,db,za);
   if (fd+fz<=1) return a+(b-a)*fz+(c-a)*fd;
-  const e=elevation(s,db,za+dz);
+  const e=elevation(s,db,zb);
   return e+(b-e)*(1-fd)+(c-e)*(1-fz);
 }
 function waterline(s: Side, z: number) {
@@ -166,15 +176,16 @@ function solidShore(s: Side) {
 // has a broken snow line and continues into the visible walls on each side.
 function mountains(scene: THREE.Scene, material: THREE.Material) {
   const p:number[]=[], col:number[]=[], index:number[]=[];
-  for(const end of [-1,1]) for(let tier=0;tier<4;tier++) {
-    const count=237, base=p.length/3;
-    for(let j=0;j<=12;j++) for(let i=0;i<count;i++) {
-      const x=(i-(count-1)/2)*17, f=j/12;
+  const across = MINI ? 59 : 237, bands = MINI ? 3 : 12;
+  for(const end of [-1,1]) for(let tier=0;tier<(MINI ? 3 : 4);tier++) {
+    const count=across, base=p.length/3;
+    for(let j=0;j<=bands;j++) for(let i=0;i<count;i++) {
+      const x=(i-(count-1)/2)*(4012/(count-1)), f=j/bands;
       const peaks=200*noise(x*.0027+tier*5,end)+134*noise(x*.0065,tier+22)
         +60*noise(x*.018,tier)+16*noise(x*.044,tier-end);
       const saddle=1-.74*bell(x-(tier%2?-220:180),210);
       const y=-9+(28+tier*34+peaks*saddle)*f**.80+f*(1-f)*70*(noise(x*.024,j*.22)-.5);
-      const z=end*((end<0?1165:790)+tier*260+j*17+108*Math.sin(x*.0031+tier*2)+38*noise(x*.016,j*.15));
+      const z=end*((end<0?1165:790)+tier*260+f*204+108*Math.sin(x*.0031+tier*2)+38*noise(x*.016,j*.15));
       const tint=schist.clone().lerp(woods,(1-f)*.77).lerp(snow,step(250+tier*15,275+tier*15,y+29*noise(x*.025,j*.3)));
       tint.multiplyScalar(.67+.56*noise(x*.02,j*.22));
       p.push(x,y,z);col.push(tint.r,tint.g,tint.b);
@@ -219,11 +230,41 @@ function conifer(){
   }
   return geometry(v,c,ix);
 }
+// Two crossed needle cards retain a jagged spruce silhouette at four triangles per tree.
+function spruceCards() {
+  const width = 32, height = 64;
+  const pixels = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const t = (y + .5) / height;
+    for (let x = 0; x < width; x++) {
+      const u = (x + .5) / width * 2 - 1;
+      const bough = (t * 11 + .3 * Math.abs(u)) % 1;
+      const grain = lattice(x, y);
+      const radius = t < .10 ? .047 : (1 - t) * (.66 + .34 * (1 - bough)) + .055 * grain;
+      const shade = t < .10 ? .35 : .65 + .19 * (1 - bough) + .16 * grain;
+      const light = Math.round(shade * 255);
+      pixels.set([light, light, light, Math.abs(u) < radius ? 255 : 0], (y * width + x) * 4);
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, width, height);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  const shape = new THREE.BufferGeometry();
+  shape.setAttribute('position', new THREE.Float32BufferAttribute([
+    -.5,0,0, .5,0,0, .5,1,0, -.5,1,0, 0,0,-.5, 0,0,.5, 0,1,.5, 0,1,-.5,
+  ], 3));
+  shape.setAttribute('uv', new THREE.Float32BufferAttribute([0,0,1,0,1,1,0,1, 0,0,1,0,1,1,0,1], 2));
+  shape.setIndex([0,1,2,0,2,3, 4,5,6,4,6,7]);
+  shape.computeVertexNormals();
+  return { shape, texture };
+}
 function vegetation(scene:THREE.Scene,rand:()=>number) {
   const trees:Piece[]=[], boulders:Piece[]=[];
   const shades=[0x395346,0x4c6552,0x576e57,0x657852,0x778565];
   const stones=[0x727a77,0x808984,0x535e60,0x92938a,0x697474];
-  for(let i=0;i<22500;i++) {
+  for(let i=0;i<(MINI ? 3400 : 22500);i++) {
     const s=rand()<.5?-1:1, z=-1400+rand()*1930, d=4+rand()**1.8*248;
     const x=s*(shore(s,z)+d), y=ground(s,x,z);
     if(y<.35 || y>206 || (meadow(s,z)>.52 && d<36)) continue;
@@ -232,7 +273,7 @@ function vegetation(scene:THREE.Scene,rand:()=>number) {
     const h=(3.1+rand()**1.5*8.1)*(1-.52*step(115,210,y)),w=h*(.48+rand()*.17);
     trees.push({x,y:y-.25,z,w,h,l:w,color:shades[Math.floor(rand()*shades.length)],yaw:rand()*6.28});
   }
-  for(let i=0;i<3600;i++) {
+  for(let i=0;i<(MINI ? 320 : 3600);i++) {
     const s=rand()<.5?-1:1,z=-1050+rand()*1440,d=6.3+rand()**2*44;
     const x=s*(shore(s,z)+d),y=ground(s,x,z);
     if(y<.35||noise(z*.035,d*.073)<.35||meadow(s,z)>.70&&d>12)continue;
@@ -240,11 +281,20 @@ function vegetation(scene:THREE.Scene,rand:()=>number) {
     boulders.push({x,y:y-.12,z,w,h:w*(.30+rand()*.57),l:w*(.68+rand()*.53),
       yaw:rand()*6.28,tilt:(rand()-.5)*.30,color:stones[Math.floor(rand()*stones.length)]});
   }
-  batch(scene,conifer(),trees,true);
-  batch(scene,new THREE.DodecahedronGeometry(.73),boulders);
+  if (MINI) {
+    const { shape, texture } = spruceCards();
+    const forest = batch(scene, shape, trees);
+    forest.material.map = texture;
+    forest.material.alphaTest = .32;
+    forest.material.side = THREE.DoubleSide;
+  } else {
+    batch(scene, conifer(), trees, true);
+  }
+  batch(scene, MINI ? new THREE.OctahedronGeometry(.73) : new THREE.DodecahedronGeometry(.73), boulders);
 }
 function hamlets(scene: THREE.Scene, kit: Kit) {
   const pieces: Piece[] = [];
+  const gables: Piece[] = [];
   const lanterns: LampSpot[] = [];
   const lights: { index: number; tint: number; strength: number; delay: number }[] = [];
   function illuminate(index: number, tint: number, strength: number, delay: number) {
@@ -271,21 +321,23 @@ function hamlets(scene: THREE.Scene, kit: Kit) {
       local(0,-.68,0,w+.14,2.4,l+.12,0x666861);
       local(0,.48+h/2,0,w,h,l,walls);
       // Gable boarding, weatherboards, white cornerboards and mullions.
-      for(let j=0;j<11;j++){
+      if (MINI) {
+        gables.push({x,y:y+.48+h,z,w,h:w*.31,l:l-.02,color:walls,yaw});
+      } else for(let j=0;j<11;j++){
         const hh=w*.31*(1-j/11);
         for(const g of [-1,1]) local(g*w*j/22,.48+h+hh/2,0,w/11,hh,l-.02,walls);
       }
-      for(let j=1;j<h/.29;j++) local(0,.48+j*.29,0,w+.05,.025,l+.05,0x796e59);
+      if (!MINI) for(let j=1;j<h/.29;j++) local(0,.48+j*.29,0,w+.05,.025,l+.05,0x796e59);
       for(const wing of [-1,1]){
         local(wing*(w/4+.1),.48+h+w*.153,0,(w/2+.43)/Math.cos(.57),.16,l+.63,0x424a49,-wing*.57);
-        for(const end of [-1,1])local(wing*w*.498,.48+h*.5,end*l*.498,.11,h,.11,0xe7ddc8);
+        if (!MINI) for(const end of [-1,1])local(wing*w*.498,.48+h*.5,end*l*.498,.11,h,.11,0xe7ddc8);
         for(const zz of [-l*.27,l*.26]) {
           local(wing*w*.508,1.45,zz,.13,1.06,.88,0xe8deca);
           const pane = local(wing*(w/2+.085),1.45,zz,.07,.86,.67,glass);
           const room = noise(i * 3.9 + wing * 13, zz * 5 + s);
           if (room > 0.14) illuminate(pane, roomTint, 1.5 + 2.4 * room, houseDelay + room * 0.15);
-          local(wing*(w/2+.13),1.45,zz,.04,.84,.052,0xd9d3b9);
-          local(wing*(w/2+.13),1.45,zz,.04,.062,.68,0xd9d3b9);
+          if (!MINI) local(wing*(w/2+.13),1.45,zz,.04,.84,.052,0xd9d3b9);
+          if (!MINI) local(wing*(w/2+.13),1.45,zz,.04,.062,.68,0xd9d3b9);
         }
       }
       // Gable windows face boats approaching along the fjord.
@@ -293,7 +345,7 @@ function hamlets(scene: THREE.Scene, kit: Kit) {
         const sill = 0.48 + h + 0.20;
         local(0,sill,end*(l/2+.045),.88,.72,.085,0xe8deca);
         const pane = local(0,sill,end*(l/2+.10),.70,.55,.05,glass);
-        local(0,sill,end*(l/2+.137),.055,.56,.026,0xd9d3b9);
+        if (!MINI) local(0,sill,end*(l/2+.137),.055,.56,.026,0xd9d3b9);
         if ((i + end) % 3 !== 0) illuminate(pane, roomTint, 1.85, houseDelay + 0.21);
       }
       local(0,1.27,-l/2,1.02,1.75,.16,0xe0d4b8);
@@ -330,6 +382,14 @@ function hamlets(scene: THREE.Scene, kit: Kit) {
     box(edge-s*3.4,1.4,z+1.04,11,.12,.11,0xab9880);
     addCollider({x:edge-s*3,z,hl:6.5,hw:1.21,r:.11,yaw:Math.PI/2});
   }
+  if (MINI) {
+    const crossSection = new THREE.Shape([
+      new THREE.Vector2(-.5, 0), new THREE.Vector2(0, 1), new THREE.Vector2(.5, 0),
+    ]);
+    const prism = new THREE.ExtrudeGeometry(crossSection, {depth: 1, bevelEnabled: false});
+    prism.translate(0,0,-.5);
+    batch(scene, prism, gables);
+  }
   const buildings = batch(scene, new THREE.BoxGeometry(1, 1, 1), pieces);
   buildings.name = 'Fjord · cottages and jetties';
   // Bake each room's tint, intensity and switch-on time into the static batch.
@@ -360,15 +420,16 @@ function hamlets(scene: THREE.Scene, kit: Kit) {
 
 function falls(scene:THREE.Scene) {
   const p:number[]=[],uv:number[]=[],ix:number[]=[];
+  const lengthSteps = MINI ? 24 : 100, widthSteps = MINI ? 2 : 4;
   for(let stream=0;stream<7;stream++) {
     const base=p.length/3, top=76+((stream*19)%26), width=[3.9,1.2,2.2,5.8,1.8,3.5,1.6][stream];
     const z0=-221-stream*7.8;
-    for(let j=0;j<=100;j++) {
-      const t=j/100, d=top*(1-t);
+    for(let j=0;j<=lengthSteps;j++) {
+      const t=j/lengthSteps, d=top*(1-t);
       const z=z0+4.5*Math.sin(2.7*t+stream*.53)+3.7*t*t;
       const w=width*(.62+t*.84)*(1+.19*Math.sin(t*15+stream));
-      for(let k=0;k<=4;k++){
-        const u=k/4,zz=z+(u-.5)*2*w;
+      for(let k=0;k<=widthSteps;k++){
+        const u=k/widthSteps,zz=z+(u-.5)*2*w;
         // Offset each ribbon in the riverward direction. White water hangs
         // free of the rough wall on upper drops and fans over the lower ledge.
         const x=-(shore(-1,zz)+d);
@@ -376,8 +437,8 @@ function falls(scene:THREE.Scene) {
         p.push(x+2.3+2.5*Math.sin(t*Math.PI),y,zz);
         uv.push(u,t+stream*1.76);
         if(j&&k){
-          const a=base+j*5+k;
-          ix.push(a-6,a-5,a,a-6,a,a-1);
+          const a=base+j*(widthSteps+1)+k, b=a-widthSteps-1;
+          ix.push(b-1,b,a,b-1,a,a-1);
         }
       }
     }

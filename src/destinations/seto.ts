@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { env, withAtmo } from '../core/atmosphere';
-import { LIGHT_GEOMETRY } from '../core/env';
+import { LIGHT_GEOMETRY, MINI } from '../core/env';
 import { Batch, M, rng, smoothstep, type Rng } from '../core/util';
 import type { BoatInfo } from '../world/build';
 import { addCollider, type Collider } from '../world/collide';
@@ -49,11 +49,23 @@ function collideBox(x: number, z: number, w: number, d: number, yaw = 0, round =
 
 function terrain(scene: THREE.Scene, crowns: THREE.Matrix4[], tints: THREE.Color[], rand: Rng) {
   const pos: number[] = [], colors: number[] = [], ids: number[] = [];
+  const islandMeshes: THREE.BufferGeometry[] = [];
+  function finishLandMesh() {
+    const land = new THREE.BufferGeometry();
+    land.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    land.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    land.setIndex(ids); land.computeVertexNormals();
+    islandMeshes.push(land);
+    pos.length = 0; colors.length = 0; ids.length = 0;
+  }
   const forest = new THREE.Color(0x485a48), pine = new THREE.Color(0x324a41);
   const rock = new THREE.Color(0x9a947e), salt = new THREE.Color(0xbbb29a), mixed = new THREE.Color(), foliage = new THREE.Color();
   for (const i of islands) {
     const near = Math.abs(i[0]) < 800 && i[1] > -1100 && i[1] < 525;
-    const slices = near ? 96 : 64, rings = near ? 26 : 14;
+    // Keep the 96 shoreline samples around navigable islands on both builds.
+    // A mobile island needs fewer inland contours; distant terrain has no collisions.
+    const slices = near ? 96 : (MINI ? 28 : 64);
+    const rings = MINI ? (near ? 7 : 4) : (near ? 26 : 14);
     const radii = Array.from({ length: rings }, (_, j) => j / rings).concat([0.981, 1, 1.018]);
     const start = pos.length / 3;
     for (let k = 0; k < radii.length; k++) {
@@ -79,6 +91,8 @@ function terrain(scene: THREE.Scene, crowns: THREE.Matrix4[], tints: THREE.Color
       }
     }
 
+    // Each island can leave the narrow portrait frustum independently.
+    if (MINI) finishLandMesh();
     if (!near) continue;
     const count = Math.round(Math.min(1000, i[2] * i[3] / 26) * (LIGHT_GEOMETRY ? 0.48 : 1));
     for (let j = 0; j < count; j++) {
@@ -88,16 +102,15 @@ function terrain(scene: THREE.Scene, crowns: THREE.Matrix4[], tints: THREE.Color
       const [x, y, z] = hillPoint(i, a, r);
       if (y < 2.5) continue;
       const s = rand.range(1.7, 3.9) * (0.8 + 0.22 * Math.sin(a * 6 + i[5]));
-      crowns.push(M(x, y - s * 0.11, z, s * 1.25, s, s * 1.25, rand() * TAU, rand.range(-0.10, 0.10)));
-      tints.push(new THREE.Color().setRGB(rand.range(0.64, 1.04), rand.range(0.79, 1.12), rand.range(0.72, 0.98)));
+      const rotation = rand() * TAU, slope = rand.range(-0.10, 0.10);
+      const tint = new THREE.Color().setRGB(rand.range(0.64, 1.04), rand.range(0.79, 1.12), rand.range(0.72, 0.98));
+      if (MINI && j % 3 === 0) continue;
+      crowns.push(M(x, y - s * 0.11, z, s * 1.25, s, s * 1.25, rotation, slope));
+      tints.push(tint);
     }
   }
 
-  const land = new THREE.BufferGeometry();
-  land.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  land.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  land.setIndex(ids);
-  land.computeVertexNormals();
+  if (!MINI) finishLandMesh();
   const mat = withAtmo(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.98 }), 'seto-coast', shader => {
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRock;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRock=position;');
@@ -114,9 +127,11 @@ function terrain(scene: THREE.Scene, crowns: THREE.Matrix4[], tints: THREE.Color
       diffuseColor.rgb *= 0.76 + detail;
       `);
   });
-  const mesh = new THREE.Mesh(land, mat);
-  mesh.name = 'Seto · wooded granite islands'; mesh.receiveShadow = true;
-  scene.add(mesh);
+  for (const land of islandMeshes) {
+    const mesh = new THREE.Mesh(land, mat);
+    mesh.name = 'Seto · wooded granite islands'; mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
 }
 
 // Draw wind-pruned black pines at twig scale. Intersecting planes keep the sparse
@@ -165,8 +180,9 @@ function pineTexture() {
 
 function pineCanopy(scene: THREE.Scene, matrices: THREE.Matrix4[], tints: THREE.Color[]) {
   const pos: number[] = [], uv: number[] = [], normal: number[] = [], indices: number[] = [];
-  for (let side = 0; side < 3; side++) {
-    const a = side * Math.PI / 3, x = Math.cos(a), z = Math.sin(a), k = pos.length / 3;
+  const planes = MINI ? 2 : 3;
+  for (let side = 0; side < planes; side++) {
+    const a = side * Math.PI / planes, x = Math.cos(a), z = Math.sin(a), k = pos.length / 3;
     pos.push(-x, 0, -z, x, 0, z, x, 2.5, z, -x, 2.5, -z);
     normal.push(-x * .48, .72, -z * .48, x * .48, .72, z * .48, x * .2, .96, z * .2, -x * .2, .96, -z * .2);
     uv.push(0, 0, 1, 0, 1, 1, 0, 1); indices.push(k, k + 1, k + 2, k, k + 2, k + 3);
@@ -202,14 +218,23 @@ function suspensionBridge(b: Batch, lamps: Batch) {
       const u = Math.abs(x) / towerX;
       return u <= 1 ? 39 + (towerY - 39) * u * u : 29 + 54 * Math.pow(Math.max(0, 1 - (Math.abs(x) - towerX) / 202), 1.9);
     };
-    for (let x = -480; x < 480; x += 8) {
-      const z = sideZ(x), z1 = sideZ(x + 8);
-      b.limb([x, deckY - 2.3, z], [x + 8, deckY - 2.3, z1], 0.25, 0.25, steelShade, 4);
-      b.limb([x, deckY - 2.3, z], [x + 4, deckY, zAt(x + 4) + side * 4.55], 0.16, 0.16, steel, 4);
-      b.limb([x + 4, deckY, zAt(x + 4) + side * 4.55], [x + 8, deckY - 2.3, z1], 0.16, 0.16, steel, 4);
-      b.limb([x, deckY + 1.65, z], [x + 8, deckY + 1.65, z1], 0.12, 0.12, steel, 4);
+    const span = MINI ? 16 : 8;
+    if (MINI) {
+      for (const level of [-2.3, 1.65]) {
+        const radius = level > 0 ? 0.12 : 0.3;
+        b.limb([-480, deckY + level, sideZ(-480)], [480, deckY + level, sideZ(480)], radius, radius, steelShade, 4);
+      }
+    }
+    for (let x = -480; x < 480; x += span) {
+      const z = sideZ(x), z1 = sideZ(x + span);
+      if (!MINI) {
+        b.limb([x, deckY - 2.3, z], [x + 8, deckY - 2.3, z1], 0.25, 0.25, steelShade, 4);
+        b.limb([x, deckY - 2.3, z], [x + 4, deckY, zAt(x + 4) + side * 4.55], 0.16, 0.16, steel, 4);
+        b.limb([x + 4, deckY, zAt(x + 4) + side * 4.55], [x + 8, deckY - 2.3, z1], 0.16, 0.16, steel, 4);
+        b.limb([x, deckY + 1.65, z], [x + 8, deckY + 1.65, z1], 0.12, 0.12, steel, 4);
+      }
       if (x >= -344 && x < 344) {
-        b.limb([x, mainCable(x), z], [x + 8, mainCable(x + 8), z1], 0.41, 0.41, steel, 7);
+        b.limb([x, mainCable(x), z], [x + span, mainCable(x + span), z1], 0.41, 0.41, steel, 7);
         b.limb([x, deckY, z], [x, mainCable(x), z], 0.13, 0.13, steelShade, 5);
       }
       if (x % 32 === 0) {
@@ -228,7 +253,16 @@ function suspensionBridge(b: Batch, lamps: Batch) {
   }
 }
 
-function harborHouse(b: Batch, lamps: Batch, w: number, d: number, h: number, base: number, rand: Rng) {
+// A thin panel fixed to an opaque wall has only one visible face. Keep that face
+// on the mobile build, so fine joinery and colored stonework survive close views.
+function frontPanel(b: Batch, x: number, y: number, z: number, w: number, h: number, d: number, color: number) {
+  if (!MINI) return b.box(x, y, z, w, h, d, color);
+  const xf = w / 2, yf = h / 2, front = z + d / 2;
+  b.quad(new THREE.Vector3(x - xf, y - yf, front), new THREE.Vector3(x + xf, y - yf, front),
+    new THREE.Vector3(x + xf, y + yf, front), new THREE.Vector3(x - xf, y + yf, front), color);
+}
+
+function harborHouse(b: Batch, detail: Batch, lamps: Batch, w: number, d: number, h: number, base: number, rand: Rng) {
   const plaster = rand.pick([0xbca98e, 0xb8ad97, 0x9e947e]);
   const timber = rand.pick([0x5a4c3e, 0x635647, 0x534a3f]);
   const roof = rand.pick([0x424b51, 0x54575a, 0x4f5454]);
@@ -245,7 +279,7 @@ function harborHouse(b: Batch, lamps: Batch, w: number, d: number, h: number, ba
       Math.hypot(run, roofRise), 0, s * roofPitch), roof);
     b.box(0, eave - 0.10, s * run, w + 1.06, 0.17, 0.14, 0x514a40);
     // Low ridges of fired clay tile catch the raking light.
-    for (let x = -w / 2 - 0.40; x < w / 2 + 0.47; x += 0.31) {
+    if (!MINI) for (let x = -w / 2 - 0.40; x < w / 2 + 0.47; x += 0.31) {
       b.add(unitBox, M(x, eave + roofRise / 2 + 0.10, s * run / 2, 0.105, 0.075,
         Math.hypot(run, roofRise), 0, s * roofPitch), roof);
     }
@@ -255,17 +289,17 @@ function harborHouse(b: Batch, lamps: Batch, w: number, d: number, h: number, ba
     const top = new THREE.Vector3(edge, ridge - 0.08, 0);
     b.quad(a, top, c, c, face);
     // End walls have a small attic vent and a sheltered side window.
-    b.box(edge + s * 0.04, eave + roofRise * 0.31, 0, 0.10, 0.35, 0.73, timber);
-    b.box(edge + s * 0.05, 1.7, 0, 0.11, 1.15, 1.63, 0x4d5754);
-    for (const z of [-0.80, -0.27, 0.27, 0.80]) b.box(edge + s * 0.12, 1.70, z, 0.12, 1.19, 0.065, timber);
-    b.box(edge + s * 0.21, 2.42, 0, 0.56, 0.13, 2.02, roof);
+    detail.box(edge + s * 0.04, eave + roofRise * 0.31, 0, 0.10, 0.35, 0.73, timber);
+    detail.box(edge + s * 0.05, 1.7, 0, 0.11, 1.15, 1.63, 0x4d5754);
+    for (const z of [-0.80, -0.27, 0.27, 0.80]) detail.box(edge + s * 0.12, 1.70, z, 0.12, 1.19, 0.065, timber);
+    detail.box(edge + s * 0.21, 2.42, 0, 0.56, 0.13, 2.02, roof);
   }
   b.box(0, ridge + 0.14, 0, w + 1.22, 0.26, 0.34, roof);
 
   // The main facade always faces the quay (local +Z).
   const z = d / 2;
   for (let x = -w / 2 + 0.09; x < w / 2; x += woodFace ? 0.32 : w / 3) {
-    b.box(x, h * 0.5 + 0.12, z + 0.025, woodFace ? 0.035 : 0.14, h, 0.055, timber);
+    frontPanel(detail, x, h * 0.5 + 0.12, z + 0.025, woodFace ? 0.035 : 0.14, h, 0.055, timber);
   }
   const bays = Math.max(3, Math.floor(w / 1.65)), bay = (w - 0.40) / bays;
   const floors = Math.floor(h / 2.5), doorIndex = rand() < 0.5 ? 0 : bays - 1;
@@ -275,12 +309,12 @@ function harborHouse(b: Batch, lamps: Batch, w: number, d: number, h: number, ba
       const door = row === 0 && j === doorIndex;
       const y = (door ? 1.20 : 1.67) + row * 2.50;
       const opening = door ? 2.12 : 1.30;
-      b.box(x, y, z + 0.055, bay - 0.14, opening, 0.12, 0x3e3a32);
-      b.box(x, y + 0.035, z + 0.12, bay - 0.29, opening - 0.19, 0.06, door ? 0x5b5245 : 0x637171);
-      if (!door && rand() < 0.32) lamps.box(x, y + 0.035, z + 0.16, bay - 0.31, opening - 0.20, 0.01, 0xffcd92);
+      frontPanel(detail, x, y, z + 0.055, bay - 0.14, opening, 0.12, 0x3e3a32);
+      frontPanel(detail, x, y + 0.035, z + 0.12, bay - 0.29, opening - 0.19, 0.06, door ? 0x5b5245 : 0x637171);
+      if (!door && rand() < 0.32) frontPanel(lamps, x, y + 0.035, z + 0.16, bay - 0.31, opening - 0.20, 0.01, 0xffcd92);
       const bars = door ? 6 : 3;
-      for (let k = 1; k < bars; k++) b.box(x + (k / bars - 0.5) * (bay - 0.25), y, z + 0.18, 0.046, opening - 0.17, 0.055, timber);
-      b.box(x, y - 0.07, z + 0.18, bay - 0.19, 0.065, 0.065, timber);
+      for (let k = 1; k < bars; k++) frontPanel(detail, x + (k / bars - 0.5) * (bay - 0.25), y, z + 0.18, 0.046, opening - 0.17, 0.055, timber);
+      frontPanel(detail, x, y - 0.07, z + 0.18, bay - 0.19, 0.065, 0.065, timber);
     }
   }
   for (const x of [-w / 2 + 0.09, w / 2 - 0.09]) b.box(x, h / 2, z + 0.08, 0.16, h, 0.18, timber);
@@ -305,7 +339,12 @@ function quaySegment(b: Batch, a: number, a1: number, rand: Rng) {
     while (along < length / 2 - 0.05) {
       const span = Math.min(rand.range(0.73, 1.42), length / 2 - along);
       const color = rand.pick(blockColors);
-      local.box(outer, row * 0.46 + 0.06, along + span / 2, 0.18, 0.421, span - 0.035, color);
+      if (MINI) {
+        const lo = along + 0.0175, hi = along + span - 0.0175;
+        const top = row * 0.46 + 0.2705, bottom = top - 0.421, front = outer + 0.09;
+        local.quad(new THREE.Vector3(front, bottom, hi), new THREE.Vector3(front, bottom, lo),
+          new THREE.Vector3(front, top, lo), new THREE.Vector3(front, top, hi), color);
+      } else local.box(outer, row * 0.46 + 0.06, along + span / 2, 0.18, 0.421, span - 0.035, color);
       along += span;
     }
   }
@@ -326,7 +365,7 @@ function quaySegment(b: Batch, a: number, a1: number, rand: Rng) {
   }
 }
 
-function village(b: Batch, lamps: Batch, rand: Rng) {
+function village(b: Batch, fine: Batch, lamps: Batch, rand: Rng) {
   // A continuous granite quay ties both rows of houses to the tide line.
   for (let a = 2.00; a < 4.14; a += 0.072) quaySegment(b, a, a + 0.072, rand);
   const wirePosts: Point[] = [];
@@ -336,12 +375,13 @@ function village(b: Batch, lamps: Batch, rand: Rng) {
       const radius = row ? 0.76 : 0.905;
       const [x, y, z] = hillPoint(port, a, radius);
       const floorY = row ? y + 0.18 : Math.max(1.44, y + 0.10);
-      const house = new Batch(), windows = new Batch();
+      const house = new Batch(), windows = new Batch(), detail = MINI ? new Batch() : house;
       const w = rand.range(5.3, 7.8), d = rand.range(4.6, 6.1);
-      harborHouse(house, windows, w, d, rand.pick([3.05, 3.25, 5.52]), floorY + 0.55, rand);
+      harborHouse(house, detail, windows, w, d, rand.pick([3.05, 3.25, 5.52]), floorY + 0.55, rand);
       const rotation = Math.PI / 2 - a;
       const world = M(x, floorY, z, 1, 1, 1, rotation);
       b.addBatch(house, world); lamps.addBatch(windows, world);
+      if (MINI) fine.addBatch(detail, world);
       if (row === 0 && j % 2 === 0) {
         const [px, , pz] = hillPoint(port, a + 0.061, 0.96);
         b.limb([px, 0.55, pz], [px, 7.26, pz], 0.13, 0.105, 0x665747, 8);
@@ -425,7 +465,7 @@ function mooredBoats(b: Batch) {
       b.limb(from, sag, 0.045, 0.045, 0x776b51, 4);
       b.limb(sag, to, 0.045, 0.045, 0x776b51, 4);
       b.box(to[0], to[1], to[2], 0.38, 0.17, 0.12, 0x514f45);
-      b.add(new THREE.TorusGeometry(0.31, 0.117, 6, 14), M(104.86, 0.75, z + end * 2.33, 1, 1, 1, -Math.PI / 2), 0x404543);
+      b.add(new THREE.TorusGeometry(0.31, 0.117, MINI ? 4 : 6, MINI ? 9 : 14), M(104.86, 0.75, z + end * 2.33, 1, 1, 1, -Math.PI / 2), 0x404543);
     }
     local.box(-0.36, 0.61, 1.45, 0.61, 0.23, 0.85, 0x8b7b58);
     local.ell(0.36, 0.69, 1.82, 0.28, 0.20, 0.24, 0xae6950);
@@ -477,8 +517,10 @@ export function buildSeto(scene: THREE.Scene): void {
   const rand = rng(716), crowns: THREE.Matrix4[] = [], tints: THREE.Color[] = [];
   terrain(scene, crowns, tints, rand); pineCanopy(scene, crowns, tints);
   const fixed = new Batch(), lamps = new Batch();
-  suspensionBridge(fixed, lamps);
-  village(fixed, lamps, rand);
+  // Separate the port from the long bridge so it can leave the mobile view frustum.
+  const bridge = MINI ? new Batch() : fixed, fine = MINI ? new Batch() : fixed;
+  suspensionBridge(bridge, lamps);
+  village(fixed, fine, lamps, rand);
   breakwater(fixed, 107, -110, 107, -64, 4.1);
   breakwater(fixed, 106, -66, 130, -44, 3.65);
   mooredBoats(fixed);
@@ -503,6 +545,12 @@ export function buildSeto(scene: THREE.Scene): void {
         *(.82+.26*saltNoise(uvSalt*4.)+.12*saltNoise(uvSalt*18.));
       `);
   });
+  if (MINI) {
+    scene.add(bridge.mesh(mat, 1, { name: 'Seto · suspension bridge' }));
+    const joinery = fine.mesh(mat, 1, { name: 'Seto · harbor joinery' });
+    joinery.layers.set(2);
+    scene.add(joinery);
+  }
   scene.add(fixed.mesh(mat, 1, { name: 'Seto · crossing and fishing port' }));
   lightMaterial = withAtmo(new THREE.MeshBasicMaterial({ vertexColors: true }));
   scene.add(lamps.mesh(lightMaterial, 1, { cast: false, receive: false, name: 'Seto · harbor lights' }));

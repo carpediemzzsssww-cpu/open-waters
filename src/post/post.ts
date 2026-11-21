@@ -219,30 +219,34 @@ export class Post {
     renderer.render(this.tri, this.cam);
   }
 
-  render(renderer: THREE.WebGLRenderer, time: number, exposure: number, outW: number, outH: number) {
-    let src: THREE.WebGLRenderTarget = this.scene;
-    for (let i = 0; i < LEVELS; i++) {
-      const u = this.mDown.uniforms;
-      u.tSrc.value = src.texture;
-      u.uTexel.value.set(1 / src.width, 1 / src.height);
-      u.uFirst.value = i === 0 ? 1 : 0;
-      this.pass(this.mDown, this.down[i], renderer);
-      src = this.down[i];
-    }
-    let acc: THREE.WebGLRenderTarget = this.down[LEVELS - 1];
-    for (let i = LEVELS - 2; i >= 0; i--) {
-      const u = this.mUp.uniforms;
-      u.tSrc.value = acc.texture;
-      u.tBase.value = this.down[i].texture;
-      u.uTexel.value.set(1 / acc.width, 1 / acc.height);
-      u.uMix.value = 0.62;
-      this.pass(this.mUp, this.up[i], renderer);
-      acc = this.up[i];
+  render(renderer: THREE.WebGLRenderer, time: number, exposure: number, outW: number, outH: number, bloom = true) {
+    if (bloom) {
+      let src: THREE.WebGLRenderTarget = this.scene;
+      for (let i = 0; i < LEVELS; i++) {
+        const u = this.mDown.uniforms;
+        u.tSrc.value = src.texture;
+        u.uTexel.value.set(1 / src.width, 1 / src.height);
+        u.uFirst.value = i === 0 ? 1 : 0;
+        this.pass(this.mDown, this.down[i], renderer);
+        src = this.down[i];
+      }
+      let acc: THREE.WebGLRenderTarget = this.down[LEVELS - 1];
+      for (let i = LEVELS - 2; i >= 0; i--) {
+        const u = this.mUp.uniforms;
+        u.tSrc.value = acc.texture;
+        u.tBase.value = this.down[i].texture;
+        u.uTexel.value.set(1 / acc.width, 1 / acc.height);
+        u.uMix.value = 0.62;
+        this.pass(this.mUp, this.up[i], renderer);
+        acc = this.up[i];
+      }
     }
     const f = this.mFinal.uniforms;
     f.tScene.value = this.scene.texture;
-    f.tBloom.value = this.up[0].texture;
-    f.tWide.value = this.up[2].texture;
+    f.uBloom.value = bloom ? .11 : 0;
+    f.uHalation.value = bloom ? .11 : 0;
+    f.tBloom.value = bloom ? this.up[0].texture : this.scene.texture;
+    f.tWide.value = bloom ? this.up[2].texture : this.scene.texture;
     f.uExposure.value = exposure;
     f.uTime.value = time;
     f.uRes.value.set(outW, outH);

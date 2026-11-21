@@ -70,6 +70,17 @@ export class Player {
     this.group.name = 'player-boat';
   }
 
+  startAt(navigation: Navigation) {
+    this.navigation = navigation;
+    this.x = navigation.spawnX;
+    this.z = navigation.spawnZ;
+    this.auto = true;
+    this.dir = 1;
+    this.heading = this.lookYaw = this.speed = this.rudder = this.wheel = this.kick = this.atEnd = this.underBridge = 0;
+    this.lookPitch = 2 * DEG;
+    this.throttle = 0.5;
+  }
+
   get forward() {
     return new THREE.Vector2(-Math.sin(this.heading), -Math.cos(this.heading));
   }

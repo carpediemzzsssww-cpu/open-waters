@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ATMO_GLSL, atmo, env } from '../core/atmosphere';
 import { foliage, seasonState } from '../core/seasons';
 import { Batch, rng, type Rng } from '../core/util';
-import { LIGHT_GEOMETRY } from '../core/env';
+import { MINI, LIGHT_GEOMETRY } from '../core/env';
 import { mainOnly, type Ctx, type Part } from './build';
 import { at, frame, LOW_Y, STREET, UP_Y, WALL } from './river';
 
@@ -373,8 +373,8 @@ export function build(ctx: Ctx): Part {
 
 // ───────────────────────── 轻量画质：按视野挑树 ─────────────────────────
 
-const NEAR = 260; // 这以内画完整叶片 + 暗核 + 树干
-const FAR = 1700; // 这以内画少量大叶片；再远交给雾
+const NEAR = MINI ? 145 : 260; // 这以内画完整叶片 + 暗核 + 树干
+const FAR = MINI ? 1350 : 1700; // 这以内画少量大叶片；再远交给雾
 
 interface Lod { mesh: THREE.InstancedMesh; tree: THREE.InstancedBufferAttribute; n: number }
 
@@ -404,10 +404,10 @@ function buildCulled(ctx: Ctx, lists: Record<string, Inst[]>, r: Rng, mat: THREE
   };
   const groups = kinds.filter((k) => k.items.length).map((k) => {
     const n = k.items.length;
-    const nearT = template(k.name as 'round', k.near, r);
+    const nearT = template(k.name as 'round', MINI ? Math.ceil(k.near * .55) : k.near, r);
     const lods = { near: mk(nearT.geo, mat, n, `trees-${k.name}`), far: null as Lod | null, core: null as Lod | null };
     if (k.far) {
-      const farT = template(k.name as 'round', k.far, r);
+      const farT = template(k.name as 'round', MINI ? Math.ceil(k.far * .62) : k.far, r);
       const lf = farT.geo.attributes.aLeaf as THREE.BufferAttribute;
       for (let i = 0; i < lf.count; i++) lf.setX(i, lf.getX(i) * k.farScale);
       lods.far = mk(farT.geo, mat, n, `trees-${k.name}-far`);
@@ -430,7 +430,7 @@ function buildCulled(ctx: Ctx, lists: Record<string, Inst[]>, r: Rng, mat: THREE
   });
 
   // 树干
-  const trunkItems = kinds.filter((k) => k.name !== 'ivy').flatMap((k) => k.items);
+  const trunkItems = kinds.reduce<Inst[]>((items, k) => k.name === 'ivy' ? items : items.concat(k.items), []);
   const tg = branchGeometry();
   const trunks = new THREE.InstancedMesh(tg, ctx.kit.std({ color: 0x3b3229, roughness: 0.95 }, 'trunk'), trunkItems.length);
   trunks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -554,7 +554,7 @@ function branchGeometry() {
   b.limb([0, 0, 0], [.009, .42, -.008], .024, .014, 0xffffff, 6);
   for (let j = 0; j < 6; j++) {
     const a = j * 2.4;
-    branch([.009, .32 + j * .024, -.008], [Math.cos(a) * .48, .8 + random() * .2, Math.sin(a) * .48], .34 + random() * .16, .012, 2);
+    branch([.009, .32 + j * .024, -.008], [Math.cos(a) * .48, .8 + random() * .2, Math.sin(a) * .48], .34 + random() * .16, .012, MINI ? 0 : 2);
   }
   return b.build();
 }

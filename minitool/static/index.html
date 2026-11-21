@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>La Seine, l’heure dorée · 塞纳河黄昏</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { height: 100%; margin: 0; background: #1b1722; overflow: hidden; }
+    body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    /* 静态首屏：脚本还在解析时就有画面；脚本接手后淡出。跑不动实时 3D 时它就是兜底页。 */
+    #boot { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10; overflow: hidden; background: #2a1e24; transition: opacity 1.2s ease; color: rgba(255, 246, 232, 0.92); font-family: "Songti SC", "Noto Serif SC", "STSong", serif; text-align: center; }
+    #boot .boot-poster { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+    #boot .boot-veil { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(16, 10, 16, 0.38); }
+    #boot .boot-text { position: absolute; left: 0; right: 0; top: 34%; padding: 0 24px; }
+    #boot .boot-eyebrow { margin: 0 0 20px; font-family: Didot, "Bodoni 72", Georgia, serif; font-size: 12px; letter-spacing: 0.42em; text-transform: uppercase; color: rgba(255, 240, 220, 0.66); }
+    #boot h1 { margin: 0; font-family: Didot, "Bodoni 72", "Playfair Display", Georgia, serif; font-weight: 400; font-size: 44px; line-height: 1.04; text-shadow: 0 2px 40px rgba(60, 20, 10, 0.55); }
+    #boot h1 em { color: #ffd9a6; }
+    #boot .boot-status { margin: 30px auto 0; max-width: 300px; font-size: 13px; line-height: 1.9; letter-spacing: 0.22em; color: rgba(255, 240, 220, 0.7); }
+    #boot.final .boot-veil { background: rgba(16, 10, 16, 0.5); }
+    @media (min-width: 600px) { #boot h1 { font-size: 72px; } }
+  </style>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div id="boot" aria-live="polite">
+    <img class="boot-poster" src="./poster.webp" alt="" />
+    <div class="boot-veil"></div>
+    <div class="boot-text">
+      <p class="boot-eyebrow">Paris · un soir d’été</p>
+      <h1>La Seine,<br /><em>l’heure dorée</em></h1>
+      <p class="boot-status">正在铺开河面…</p>
+    </div>
+  </div>
+  <canvas id="stage" aria-label="塞纳河黄昏 · 第一人称 3D"></canvas>
+  <div id="bars" aria-hidden="true"><i></i><i></i></div>
+  <div id="hud"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

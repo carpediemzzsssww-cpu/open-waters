@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { activeVoyage } from '../destinations/catalog';
+import type { Voyage } from '../destinations/catalog';
 import { SEASONS, seasonState, seasonTint } from './seasons';
 import { DEG, lerp, smoothstep } from './util';
 
@@ -186,10 +186,10 @@ const KEYS: Key[] = [
   },
 ];
 
-export const SUN_AZIMUTH = (activeVoyage.sunBearing ?? 7) * DEG;
-const waterTint = new THREE.Color().fromArray(activeVoyage.waterTint ?? [1, 1, 1]);
-const daylight = activeVoyage.daylight;
-const skyTint = new THREE.Color().fromArray(daylight?.skyTint ?? [1, 1, 1]);
+
+const waterTint = new THREE.Color(1, 1, 1);
+
+const skyTint = new THREE.Color();
 const SUN_EL0 = 8.2;
 const SUN_EL1 = -8.5;
 
@@ -208,6 +208,9 @@ export const env = {
   night: 0, // 0..1：灯亮起的程度
   windowGlow: 0, // 0..1：窗里亮灯的比例
 };
+
+let locationProfile: Pick<Voyage, 'waterTint'|'sunBearing'|'daylight'> = {};
+export function setAtmosphereProfile(voyage: Voyage) { locationProfile = voyage; }
 
 const _a = new THREE.Color();
 export function setDusk(d: number) {
@@ -231,10 +234,14 @@ export function setDusk(d: number) {
   env.sunLight.lerpColors(a.sun, b.sun, k);
   env.exposure = lerp(a.exposure, b.exposure, k);
 
+  const daylight = locationProfile.daylight;
+  const azimuth = (locationProfile.sunBearing ?? 7) * DEG;
+  if (daylight) skyTint.fromArray(daylight.skyTint); else skyTint.setRGB(1, 1, 1);
+  if (locationProfile.waterTint) waterTint.fromArray(locationProfile.waterTint); else waterTint.setRGB(1, 1, 1);
   const el = lerp(SUN_EL0, SUN_EL1, d);
   env.sunElevDeg = el;
   const e = el * DEG;
-  env.sunDir.set(Math.sin(SUN_AZIMUTH) * Math.cos(e), Math.sin(e), -Math.cos(SUN_AZIMUTH) * Math.cos(e)).normalize();
+  env.sunDir.set(Math.sin(azimuth) * Math.cos(e), Math.sin(e), -Math.cos(azimuth) * Math.cos(e)).normalize();
   atmo.uSunDir.value.copy(env.sunDir);
   // 直射光：贴近地平线时被大气吃掉
   env.sunIntensity = lerp(a.sunI, b.sunI, k) * smoothstep(-0.6, 2.2, el);

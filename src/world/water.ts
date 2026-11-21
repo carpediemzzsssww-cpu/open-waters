@@ -28,6 +28,7 @@ precision highp float;
 varying vec3 vWorld;
 varying vec4 vMirror;
 uniform sampler2D uRefl;
+uniform float uLiveReflection;
 uniform sampler2D uSlope;
 uniform sampler2D uNoise;
 uniform sampler2D uWake;
@@ -131,22 +132,27 @@ void main() {
   F = min(F, 0.94);
 
   // 倒影：平均坡度决定往哪偏，方差决定竖向抹多长
-  vec2 uv = vMirror.xy / vMirror.w;
-  float sa = dot(S, vdir), sc = dot(S, vright);
-  vec2 off = vec2(sc * V.y * uFovScale.x, -sa * uFovScale.y);
-  float sv = sig * uFovScale.y;
-  float jit = hash12(gl_FragCoord.xy + fract(uTime) * 61.0) - 0.5;
+  vec3 refl;
   vec4 R = vec4(0.0);
-  float wsum = 0.0;
-  for (int i = 0; i < 5; i++) {
-    float t = (float(i) - 2.0 + jit) * 0.8;
-    float w = exp(-0.5 * t * t);
-    vec2 u2 = uv + off + vec2(0.0, t * sv);
-    R += texture2D(uRefl, clamp(u2, vec2(0.002), vec2(0.998))) * w;
-    wsum += w;
+  if (uLiveReflection < .5) {
+    refl = atmoSky(reflect(-V, N));
+  } else {
+    vec2 uv = vMirror.xy / vMirror.w;
+    float sa = dot(S, vdir), sc = dot(S, vright);
+    vec2 off = vec2(sc * V.y * uFovScale.x, -sa * uFovScale.y);
+    float sv = sig * uFovScale.y;
+    float jit = hash12(gl_FragCoord.xy + fract(uTime) * 61.0) - 0.5;
+    float wsum = 0.0;
+    for (int i = 0; i < 5; i++) {
+      float t = (float(i) - 2.0 + jit) * 0.8;
+      float w = exp(-0.5 * t * t);
+      vec2 u2 = uv + off + vec2(0.0, t * sv);
+      R += texture2D(uRefl, clamp(u2, vec2(0.002), vec2(0.998))) * w;
+      wsum += w;
+    }
+    R /= wsum;
+    refl = min(R.rgb, vec3(24.0));
   }
-  R /= wsum;
-  vec3 refl = min(R.rgb, vec3(24.0));
 
   // 桥洞下面：水是暗的
   float shade = 1.0 - uShade.z * smoothstep(uShade.y + 3.0, uShade.y - 3.0, abs(vWorld.z - uShade.x));
@@ -276,6 +282,12 @@ export class WakeSim {
     this.quad.frustumCulled = false;
   }
 
+  releaseTargets() {
+    this.a.dispose();
+    this.b.dispose();
+    this.first = true;
+  }
+
   get texture() {
     return this.a.texture;
   }
@@ -349,6 +361,7 @@ export class Water {
       ...atmo,
       uTexMatrix: { value: this.texMatrix },
       uRefl: { value: this.rt.texture },
+      uLiveReflection: { value: 1 },
       uSlope: { value: slope },
       uNoise: { value: noise },
       uWake: { value: this.wake ? this.wake.texture : null },

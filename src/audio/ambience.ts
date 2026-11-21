@@ -145,6 +145,12 @@ export class Ambience {
     return this.muted;
   }
 
+  changeLocation(city: boolean) {
+    this.citySounds = city;
+    this.bellDone = false;
+    if (this.ctx) this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+  }
+
   setSuspended(s: boolean) {
     if (!this.ctx) return;
     if (s) void this.ctx.suspend();

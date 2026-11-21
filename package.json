@@ -1,13 +1,16 @@
 {
   "name": "open-waters",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:minitool": "vite build --mode minitool --config vite.minitool.config.ts && node scripts/minitool/package.mjs",
+    "serve:minitool": "node scripts/minitool/serve-csp.mjs dist-minitool 5196",
+    "qa:minitool": "node scripts/minitool/qa-release.mjs"
   },
   "dependencies": {
     "three": "^0.187.0"
@@ -16,7 +19,9 @@
     "@types/three": "^0.187.0",
     "playwright-core": "^1.65.1",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "postcss": "^8.5.33",
+    "rolldown": "^1.2.19"
   },
   "description": "Three procedural waterways to explore by wooden boat.",
   "license": "MIT"

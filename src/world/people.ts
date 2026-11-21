@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rng } from '../core/util';
-import { LIGHT_GEOMETRY } from '../core/env';
+import { MINI, LIGHT_GEOMETRY } from '../core/env';
 import { mainOnly, type Ctx, type Part } from './build';
 import { deckY, HALF, LOW_Y, PARAPET, STREET, UP_Y, WALL } from './river';
 import { terraces } from './traffic';
@@ -77,7 +77,7 @@ export function build(ctx: Ctx): Part {
   // ── 实例
   // 轻量画质：只画离镜头最近的 SLOTS 个人（每 0.4 s 重新挑一次），几何也更省
   if (LIGHT_GEOMETRY) for (const p of people) p.skirt = false;
-  const SLOTS = 44;
+  const SLOTS = MINI ? 16 : 44;
   const n = LIGHT_GEOMETRY ? Math.min(SLOTS, people.length) : people.length;
   const mat = ctx.kit.std({ roughness: 0.82 }, 'people');
   const head = new THREE.InstancedMesh(new THREE.SphereGeometry(0.1, LIGHT_GEOMETRY ? 6 : 10, LIGHT_GEOMETRY ? 5 : 8), mat, n);

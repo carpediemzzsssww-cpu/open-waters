@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
 import strings from '../content/strings.json';
-import { atmo, env, patchFogChunks, setDusk } from './core/atmosphere';
+import { atmo, env, patchFogChunks, setAtmosphereProfile, setDusk } from './core/atmosphere';
 import { TimePanel } from './ui/time-panel';
 import { clockLabel, seasonState, selectSeason, type Season } from './core/seasons';
 import { colliders } from './world/collide';
-import { activeVoyage } from './destinations/catalog';
+import { MINI } from './core/env';
+import { visibleBatches } from './minitool/visible-batches';
+import { releaseGraphics } from './minitool/release-world';
+import { activeVoyage, selectVoyage, type Voyage } from './destinations/catalog';
 import { clamp, damp, DEG, lerp, nextFrame } from './core/util';
 import { Post } from './post/post';
 import { buildStages, type Part } from './world/build';
@@ -30,7 +33,8 @@ const TIERS: Record<string, Tier> = {
   medium: { tier: 'medium', maxDpr: 1.5, budget: 1.5e6, msaa: 4, refl: 0.4, shadow: 1024, wake: 256, trees: 0.8, people: 0.8 },
   low: { tier: 'low', maxDpr: 1.25, budget: 0.9e6, msaa: 0, refl: 0.33, shadow: 0, wake: 0, trees: 0.55, people: 0.5 },
 };
-const Q = TIERS[params.get('q') ?? (coarse ? 'medium' : 'high')] ?? TIERS.high;
+const miniTier: Tier = {tier: 'portable', maxDpr: 1.25, budget: 0.64e6, msaa: 0, refl: 0.30, shadow: 0, wake: 96, trees: 0.55, people: 0.5};
+const Q = MINI ? miniTier : TIERS[params.get('q') ?? (coarse ? 'medium' : 'high')] ?? TIERS.high;
 
 function fallback(kind: keyof typeof strings.fallback) {
   document.body.classList.add('fallback');
@@ -102,7 +106,7 @@ export const state = {
   time: 0,
   timeScale: 1,
   flow: true, // 时间是否在流动
-  duskRate: 1 / 420,
+  duskRate: MINI ? 1 / 300 : 1 / 420,
   duskTarget: -1, // ≥0 时：正在被拨到某个时刻
   paused: false,
   lost: false, // WebGL context 丢了
@@ -121,6 +125,7 @@ if (params.has('auto')) player.auto = params.get('auto') !== '0';
 if (params.has('thr')) player.throttle = num('thr', 0.5);
 if (params.has('speed')) player.speed = num('speed', 0);
 selectSeason(params.get('season') ?? 'summer');
+setAtmosphereProfile(activeVoyage);
 setDusk(num('dusk', 0.03));
 if (params.has('flow')) state.flow = params.get('flow') !== '0';
 const manual = params.has('perf'); // ?perf：不跑 rAF，由 __openWaters.step(ms) 手动推进
@@ -128,6 +133,11 @@ const manual = params.has('perf'); // ?perf：不跑 rAF，由 __openWaters.step
 const input: Input = { fwd: 0, turn: 0 };
 const keys = new Set<string>();
 let parts: Part[] = [];
+const destination = MINI ? new THREE.Scene() : scene;
+if (MINI) scene.add(destination);
+let boatParts: Part[] = [];
+let changingVoyage = false;
+let leaveVoyage: (() => void) | undefined;
 let obstacles: Obstacle[] = [];
 const hud = new Hud(document.getElementById('hud')!, params.get('ui') === '0');
 const audio = new Ambience(activeVoyage.citySounds ?? false);
@@ -137,7 +147,7 @@ let bufW = 0, bufH = 0, rtW = 0, rtH = 0, baseFov = 43;
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   if (w < 2 || h < 2) return; // 页面隐藏时量到 0：等可见了再量
-  const dpr = Math.min(window.devicePixelRatio || 1, Q.maxDpr);
+  const dpr = Math.min(window.devicePixelRatio || 1, Q.maxDpr, MINI ? Math.sqrt(1e6 / (w * h)) : Infinity);
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h);
   bufW = Math.floor(w * dpr);
@@ -358,7 +368,9 @@ function render() {
   const shade = activeVoyage.bridgeShade;
   water.uniforms.uShade.value.set(shade?.z ?? 0, shade?.halfSpan ?? 1, shade ? 0.85 : 0, 0);
   treePass.value = 0;
-  water.renderReflection(renderer, scene, camera, sky.uniforms.uSunDisc);
+  const liveReflection = !MINI || state.renderScale > .66;
+  water.uniforms.uLiveReflection.value = liveReflection ? 1 : 0;
+  if (liveReflection) water.renderReflection(renderer, scene, camera, sky.uniforms.uSunDisc);
   treePass.value = 1;
   if (sun.castShadow && shadowTick++ % 2 === 0) renderer.shadowMap.needsUpdate = true;
   renderer.setRenderTarget(post.scene);
@@ -366,7 +378,7 @@ function render() {
   renderer.render(scene, camera);
   state.fade = params.get('ui') === '0' ? 1 : damp(state.fade, 1, 1.2, 1 / 60);
   post.mFinal.uniforms.uFade.value = state.fade;
-  post.render(renderer, state.time, env.exposure, bufW, bufH);
+  post.render(renderer, state.time, env.exposure, bufW, bufH, !MINI || state.renderScale > .76);
 }
 
 // 帧率自适应：只缩放内部渲染分辨率，不动画布（动画布会清空画面）。
@@ -374,9 +386,12 @@ let slow = 0, fast = 0, warm = 0;
 function adapt(dt: number) {
   state.fps = damp(state.fps, 1 / Math.max(dt, 1e-3), 1.5, dt);
   if (!state.started || manual) return;
+  if (MINI && state.renderScale <= 0.61 && state.fps < 15 && slow > 2.3) {
+    state.stopped = true; audio.setSuspended(true); fallback('slow'); return;
+  }
   warm += dt;
   if (warm < 3) return; // 刚开始那几秒在编译着色器、上传贴图，不算
-  const lo = 44;
+  const lo = MINI ? 30 : 44;
   if (state.fps < lo) slow += dt; else slow = 0;
   if (state.fps > 57) fast += dt; else fast = 0;
   const minScale = 0.6;
@@ -396,22 +411,32 @@ function adapt(dt: number) {
 }
 
 let last = performance.now();
+let animation = 0;
+function schedule() {
+  if (!manual && !animation && !state.stopped && !state.paused && !state.lost) animation = requestAnimationFrame(frame);
+}
 function frame(now: number) {
-  requestAnimationFrame(frame);
-  if (state.paused || state.lost || state.stopped) {
+  animation = 0;
+  schedule();
+  if (state.paused || state.lost || state.stopped || changingVoyage) {
     last = now;
     return;
   }
-  const dt = Math.min((now - last) / 1000, 0.05);
+  const elapsed = (now - last) / 1000;
+  const dt = Math.min(elapsed, 0.05);
   last = now;
   update(dt);
   render();
-  adapt(dt);
+  adapt(Math.max(elapsed, 0.001));
 }
 document.addEventListener('visibilitychange', () => {
   state.paused = document.hidden;
   audio.setSuspended(document.hidden);
-  if (!document.hidden) {
+  if (document.hidden) {
+    cancelAnimationFrame(animation);
+    animation = 0;
+  } else {
+    schedule();
     last = performance.now(); // 回来时不补算
     slow = fast = 0;
     resize();
@@ -423,6 +448,18 @@ let lostCount = 0;
 canvas.addEventListener('webglcontextlost', (e) => {
   e.preventDefault();
   state.lost = true;
+  if (MINI) {
+    audio.setSuspended(true);
+    cancelAnimationFrame(animation);
+    animation = 0;
+    releaseGraphics(scene);
+    renderer.renderLists.dispose();
+    post.setSize(2,2);
+    water.rt.setSize(2,2);
+    water.wake?.releaseTargets();
+    skyEnv.releaseTargets();
+    scene.environment = null;
+  }
   lostCount++;
   document.body.classList.add('gl-lost');
   if (lostCount >= 2) {
@@ -433,9 +470,12 @@ canvas.addEventListener('webglcontextlost', (e) => {
 canvas.addEventListener('webglcontextrestored', () => {
   if (state.stopped) return;
   document.body.classList.remove('gl-lost');
+  if (MINI) state.renderScale = Math.max(0.6, state.renderScale * 0.8);
   applyScale(true);
   skyEnv.update(scene, true);
   state.lost = false;
+  if (MINI && !document.hidden) audio.setSuspended(false);
+  schedule();
 });
 
 function begin() {
@@ -464,21 +504,26 @@ window.addEventListener('pointerdown', () => { if (state.started) audio.setSuspe
  */
 function capture(longSide = 1600) {
   const w = window.innerWidth, h = window.innerHeight;
-  const dpr = clamp(longSide / Math.max(w, h), 1, 3);
-  renderer.setPixelRatio(dpr);
-  renderer.setSize(w, h);
-  bufW = Math.floor(w * dpr);
-  bufH = Math.floor(h * dpr);
-  post.setSize(bufW, bufH);
-  water.setSize(bufW, bufH, Q.refl);
-  render();
-  const out = document.createElement('canvas');
-  out.width = bufW;
-  out.height = bufH;
-  out.getContext('2d')!.drawImage(renderer.domElement, 0, 0);
-  resize();
-  applyScale(true);
-  return out;
+  const requested = clamp(longSide / Math.max(w, h), MINI ? .1 : 1, 3);
+  const dpr = MINI ? Math.min(requested, Math.sqrt(1e6 / (w*h))) : requested;
+  try {
+    renderer.setPixelRatio(dpr);
+    renderer.setSize(w, h);
+    bufW = Math.floor(w * dpr);
+    bufH = Math.floor(h * dpr);
+    post.setSize(bufW, bufH);
+    water.setSize(bufW, bufH, Q.refl);
+    render();
+    const out = document.createElement('canvas');
+    out.width = bufW;
+    out.height = bufH;
+    out.getContext('2d')!.drawImage(renderer.domElement, 0, 0);
+    return out;
+  } finally {
+    resize();
+    applyScale(true);
+    if (MINI) render();
+  }
 }
 
 function scrubDusk(d: number) {
@@ -532,6 +577,7 @@ export const api = {
     else beginners.push(fn);
   },
   begin,
+  switchVoyage,
   get baseFov() {
     return baseFov;
   },
@@ -548,18 +594,61 @@ declare global {
   }
 }
 
+async function switchVoyage(voyage: Voyage) {
+  if (!MINI || changingVoyage || voyage === activeVoyage || state.stopped || state.lost) return;
+  changingVoyage = true;
+  try {
+    const route = await voyage.loadWorld();
+    parts = [];
+    obstacles = [];
+    colliders.length = 0;
+    leaveVoyage?.();
+    leaveVoyage = route.release;
+    water.wake?.releaseTargets();
+    releaseGraphics(destination, player.group, kit);
+    destination.clear();
+    selectVoyage(voyage);
+    setAtmosphereProfile(voyage);
+    audio.changeLocation(!!voyage.citySounds);
+    player.startAt(voyage.navigation);
+    player.fov = player.fovTarget = baseFov;
+    keys.clear();
+    padFwd = padTurn = 0;
+    setDusk(env.dusk);
+    parts = await route.build({scene: destination, kit, quality: Q, playerGroup: player.group}, async () => { await nextFrame(); });
+    parts.push(visibleBatches(destination), ...boatParts);
+    obstacles = parts.reduce<Obstacle[]>((items, p) => items.concat(p.obstacles ?? []), []);
+    window.__openWaters.parts = parts;
+    skyEnv.update(scene, true);
+    renderer.shadowMap.needsUpdate = true;
+    state.fade = 0.75;
+    update(0);
+    render();
+  } catch (error) {
+    state.stopped = true;
+    fallback('lost');
+    throw error;
+  } finally {
+    changingVoyage = false;
+    last = performance.now();
+  }
+}
+
 async function boot() {
   update(0);
   render();
-  const ctx = { scene, kit, quality: Q, playerGroup: player.group };
+  const ctx = { scene: destination, kit, quality: Q, playerGroup: player.group };
   const progress = async (label: string, p: number) => {
     hud.progress(label, p);
     await nextFrame();
   };
   const route = await activeVoyage.loadWorld();
+  if (MINI) leaveVoyage = route.release;
   parts = await route.build(ctx, (label, p) => progress(label, p * 0.9));
-  parts.push(...await buildStages(ctx, (label, p) => progress(label, 0.9 + p * 0.1), [['boat', buildBoat]]));
-  obstacles = parts.flatMap((p) => p.obstacles ?? []);
+  boatParts = await buildStages({ ...ctx, scene }, (label, p) => progress(label, 0.9 + p * 0.1), [['boat', buildBoat]]);
+  if (MINI) parts.push(visibleBatches(destination));
+  parts.push(...boatParts);
+  obstacles = parts.reduce<Obstacle[]>((items, p) => items.concat(p.obstacles ?? []), []);
   skyEnv.update(scene, true);
   renderer.shadowMap.needsUpdate = true;
   // 先在后台把一帧画完（着色器在这时编译），开场画面就不会卡一下
@@ -573,7 +662,7 @@ async function boot() {
       return Q;
     },
     setDusk,
-      step(ms = 16.7) {
+    step(ms = 16.7) {
       const n = Math.max(1, Math.round(ms / 16.7));
       for (let i = 0; i < n; i++) update(ms / n / 1000);
       render();
@@ -594,8 +683,14 @@ async function boot() {
   if (manual) {
     update(1 / 60);
     render();
-  } else requestAnimationFrame(frame);
+  } else schedule();
 }
+if (MINI) renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
+  console.error('WebGL shader',gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment));
+  state.stopped = true;
+  audio.setSuspended(true);
+  fallback('nogl');
+};
 boot().catch((err) => {
   console.error(err);
   hud.fail(String(err?.message ?? err));

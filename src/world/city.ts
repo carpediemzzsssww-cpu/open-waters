@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rng } from '../core/util';
 import { env } from '../core/atmosphere';
-import { LIGHT_GEOMETRY } from '../core/env';
+import { MINI, LIGHT_GEOMETRY } from '../core/env';
 import { mainOnly, type Ctx, type Part } from './build';
 import { addBlock, FacadeBuilder, facadeUniforms, makeFacadeMaterial, type V2 } from './facade';
 import { at, frame, STREET, UP_Y } from './river';
@@ -13,12 +13,11 @@ import { at, frame, STREET, UP_Y } from './river';
  * 右岸（+X）：桥东是香榭丽舍花园的树，桥西是大皇宫，之后是阿尔贝一世林荫道后面的楼。
  * 临河第一排做得细（老虎窗、阳台、烟囱），后排和远处只留体块和屋顶线。
  */
-export let facadeBuilder: FacadeBuilder;
 export const pots: { x: number; y: number; z: number; s: number }[] = [];
 
 export function build(ctx: Ctx): Part {
   const r = rng(1853);
-  const fb = (facadeBuilder = LIGHT_GEOMETRY ? ctx.shared.facade : new FacadeBuilder());
+  const fb = LIGHT_GEOMETRY ? ctx.shared.facade : new FacadeBuilder();
 
   const row = (side: number, u0: number, u1: number, s: number, o: { floors: [number, number]; depth: number; detail: (u: number) => boolean; floorH?: number; gap?: number }) => {
     let u = u0;
@@ -85,7 +84,7 @@ export function build(ctx: Ctx): Part {
 
   // 烟囱顶上的陶罐
   // 轻量画质：陶罐只留临河第一排（老虎窗那几栋），四棱、不封口
-  const potList = LIGHT_GEOMETRY ? pots.filter((_, i) => i % 3 === 0) : pots;
+  const potList = LIGHT_GEOMETRY ? pots.filter((_, i) => i % (MINI ? 12 : 3) === 0) : pots;
   const potGeo = new THREE.CylinderGeometry(0.1, 0.13, 0.6, LIGHT_GEOMETRY ? 4 : 6, 1, LIGHT_GEOMETRY);
   const potMat = ctx.kit.std({ color: 0x96573a, roughness: 0.85 }, 'pots');
   const im = new THREE.InstancedMesh(potGeo, potMat, potList.length);

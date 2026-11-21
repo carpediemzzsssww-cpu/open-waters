@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MINI } from '../core/env';
 import { seasonState } from '../core/seasons';
 import { ATMO_GLSL, atmo, env } from '../core/atmosphere';
 import { DEG } from '../core/util';
@@ -133,7 +134,7 @@ export class Sky {
       depthWrite: false,
       fog: false,
     });
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), mat);
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, MINI ? 24 : 48, MINI ? 12 : 24), mat);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1000;
     this.mesh.name = 'sky';
@@ -170,6 +171,12 @@ export class SkyEnvironment {
       new THREE.MeshBasicMaterial({ side: THREE.BackSide, fog: false }),
     );
     this.scene.add(this.ground);
+  }
+
+  releaseTargets() {
+    this.current?.dispose();
+    this.current = null;
+    this.pmrem.dispose();
   }
 
   /** dusk 变了一点才重烘（每次几毫秒） */

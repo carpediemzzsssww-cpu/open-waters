@@ -1,0 +1,46 @@
+{
+  "hints": [
+    [
+      "拖动",
+      "环顾"
+    ],
+    [
+      "双指",
+      "变焦"
+    ],
+    [
+      "◎",
+      "拍一张"
+    ]
+  ],
+  "gyro": {
+    "label": "体感",
+    "on": "转动手机，四处看看",
+    "off": "体感关了，拖动环顾"
+  },
+  "sound": {
+    "on": "声音开",
+    "off": "静音"
+  },
+  "photo": {
+    "save": "存到相册",
+    "post": "发笔记",
+    "share": "分享",
+    "again": "再拍一张",
+    "close": "收起",
+    "saved": "存好了，在相册里",
+    "saveFail": "没存上，再试一次",
+    "noBridge": "在小红书 App 里打开，才能存相册和发笔记",
+    "posting": "正在打开笔记编辑…",
+    "postFail": "没能打开笔记编辑，再试一次",
+    "follow": "关注作者，看更多小世界",
+    "followed": "已关注",
+    "noteTitle": "塞纳河上的黄昏"
+  },
+  "places": {
+    "start": "Port des Champs-Élysées",
+    "alexandre": "Pont Alexandre III",
+    "invalides": "Pont des Invalides",
+    "concorde": "Pont de la Concorde"
+  }
+}

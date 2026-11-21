@@ -20,7 +20,7 @@ export interface Voyage {
   waterTint?: [number, number, number];
   sunBearing?: number;
   daylight?: { skyTint: [number, number, number]; haze: number; glow: number };
-  loadWorld: () => Promise<{ build: (ctx: WorldContext, step: Progress) => Promise<Part[]> }>;
+  loadWorld: () => Promise<{ build: (ctx: WorldContext, step: Progress) => Promise<Part[]>; release?: () => void }>;
 }
 
 export const voyages: Voyage[] = [
@@ -69,4 +69,6 @@ export const voyages: Voyage[] = [
 ];
 
 const requested = new URLSearchParams(window.location.search).get('voyage');
-export const activeVoyage = voyages.find(v => v.id === requested) ?? voyages[0];
+export let activeVoyage = voyages.find(v => v.id === requested) ?? voyages[0];
+
+export function selectVoyage(voyage: Voyage) { activeVoyage = voyage; }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ATMO_GLSL, atmo, env } from '../core/atmosphere';
-import { LIGHT_GEOMETRY } from '../core/env';
+import { MINI, LIGHT_GEOMETRY } from '../core/env';
 import { mainOnly, type Ctx, type Part } from './build';
 import type { Kit } from './materials';
 import { lampSpots, type LampSpot } from './river';
@@ -121,7 +121,7 @@ function materials(kit: Kit) {
   return mats;
 }
 
-const BULB = LIGHT_GEOMETRY ? new THREE.SphereGeometry(1, 5, 3) : new THREE.SphereGeometry(1, 10, 7);
+const BULB = MINI ? new THREE.OctahedronGeometry(1) : LIGHT_GEOMETRY ? new THREE.SphereGeometry(1, 5, 3) : new THREE.SphereGeometry(1, 10, 7);
 const _m = new THREE.Matrix4(), _c = new THREE.Color();
 
 /** 一组灯。可以挂在会动的东西（船）下面。 */
